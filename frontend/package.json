@@ -12,7 +12,9 @@
   "dependencies": {
     "firebase": "^11.7.3",
     "react": "^19.0.0",
-    "react-dom": "^19.0.0"
+    "react-dom": "^19.0.0",
+    "react-modal": "^3.16.3",
+    "react-router-dom": "^7.6.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",
