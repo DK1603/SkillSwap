@@ -7,6 +7,7 @@ import LessonDetails from './components/LessonDetails';
 import Dashboard from './components/Dashboard';
 import Chats from './components/Chats';
 import Login from './components/Login';
+import CreateLesson from './components/CreateLesson';
 import './App.css';
 
 function Protected({ children }) {
@@ -35,6 +36,14 @@ export default function App() {
           element={
             <Protected>
               <Chats />
+            </Protected>
+          }
+        />
+        <Route 
+          path="/create" 
+          element={
+            <Protected>
+              <CreateLesson/>
             </Protected>
           }
         />
