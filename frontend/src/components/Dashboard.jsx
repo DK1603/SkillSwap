@@ -1,5 +1,6 @@
 import React from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { Link } from 'react-router-dom';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -9,7 +10,9 @@ export default function Dashboard() {
         <img src='profile.svg' style={{width: 120, height: 120}}/>
         <h3>{user.name}</h3>
         <p>Your points: </p>
-        <button style={{ marginTop: '1rem', padding: '0.5rem 1rem' }}>Create Lesson</button>
+        <Link to="/create">
+          <button style={{ marginTop: '1rem', padding: '0.5rem 1rem' }}>Create Lesson</button>
+        </Link>
       </div>
       <div style={{ flex: 1 , display: "flex", flexDirection: "column"}}>
         <h2 style={{textAlign: "left"}}>Dashboard</h2>
