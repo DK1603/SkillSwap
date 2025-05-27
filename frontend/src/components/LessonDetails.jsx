@@ -105,11 +105,11 @@ export default function LessonDetails() {
   return (
     <div style={{ background: '#f9f9f9', color: '#000', minHeight: '100vh', fontFamily: 'sans-serif' }}>
       <div style={{ display: 'flex', padding: '2rem', background: '#000', color: '#fff' }}>
-        <div style={{ flex: 2 }}>
-          <h1>{lesson.title}</h1>
-          <p>{lesson.description}</p>
-          <p>👁 {lesson.registered}({lesson.space})명이 수강하고 있어요.</p>
-          <p>👨‍🏫 Teacher: {lesson.teacher} ⭐ {lesson.rating}</p>
+        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '0.5rem' }}>
+          <h1 style={{ margin: 0, textAlign: 'left' }}>{lesson.title}</h1>
+          <p style={{ margin: 0, textAlign: 'left', minHeight: '2.5rem', }}>{lesson.description}</p>
+          <p style={{ margin: 0, textAlign: 'left' }}>👁 {lesson.registered}({lesson.space})명이 수강하고 있어요.</p>
+          <p style={{ margin: 0, textAlign: 'left' }}>👨‍🏫 Teacher: {lesson.teacher} ⭐ {lesson.rating}</p>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             {lesson.tags.map((tag, i) => (
               <span key={i} style={{ background: '#444', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '1rem', fontSize: '0.8rem' }}>#{tag}</span>
@@ -143,6 +143,66 @@ export default function LessonDetails() {
 
         {/* Center Curriculum */}
         <div style={{ flex: 2 }}>
+          {lesson.chapters.map((ch, index) => {
+            const id = `chapter-${index}`;
+            return (
+              <div key={index} style={{
+                border: '1px solid #ddd',
+                borderRadius: '6px',
+                marginBottom: '1rem'
+              }}>
+                <div
+                  onClick={() => {
+                    const content = document.getElementById(id);
+                    const icon = document.getElementById(`icon-${index}`);
+                    const isOpen = content.style.display === 'block';
+                    content.style.display = isOpen ? 'none' : 'block';
+                    icon.innerText = isOpen ? '▶' : '▼';
+                  }}
+                  style={{
+                    backgroundColor: '#ffffff',
+                    padding: '1rem',
+                    cursor: 'pointer',
+                    fontWeight: 'bold',
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    borderTopLeftRadius: '6px',
+                    borderTopRightRadius: '6px'
+                  }}
+                >
+                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span id={`icon-${index}`} style={{ fontSize: '1.2rem' }}>▶</span>
+                    {ch.title}
+                  </span>
+                  <span>{ch.lessons.length}개</span>
+                </div>
+                <div id={id} style={{
+                  display: 'none',
+                  padding: '1rem',
+                  backgroundColor: '#ffffff',
+                  borderBottomLeftRadius: '6px',
+                  borderBottomRightRadius: '6px'
+                }}>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                    {ch.lessons.map((lsn, idx) => (
+                      <li key={idx} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        padding: '0.25rem 0'
+                      }}>
+                        <span>{lsn}</span>
+                        <span style={{ fontSize: '0.85rem', color: '#666' }}>16:29</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        {/* <div style={{ flex: 2 }}>
           {lesson.chapters.map((ch, idx) => (
             <details key={idx} style={{ background: '#fff', padding: '1rem', borderRadius: 8, marginBottom: '1rem', border: '1px solid #ddd' }}>
               <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>{ch.title}</summary>
@@ -153,7 +213,7 @@ export default function LessonDetails() {
               </ul>
             </details>
           ))}
-        </div>
+        </div> */}
 
         {/* Right reviews */}
         <div style={{ flex: 1 }}>
