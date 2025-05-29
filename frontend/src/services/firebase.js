@@ -11,6 +11,7 @@ import {
   addDoc,
   getDocs,
   onSnapshot,
+  doc,
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -43,6 +44,7 @@ export function onAuthChange(callback) {
 
 // Firestore helpers
 const lessonsCol = collection(db, 'lessons');
+const usersCol = collection(db, 'users');
 
 export function fetchLessons() {
   return getDocs(lessonsCol);
@@ -54,4 +56,14 @@ export function onLessonsSnapshot(cb) {
 
 export function createLesson(data) {
   return addDoc(lessonsCol, data);
+}
+
+export function fetchUsers() {
+  return getDocs(usersCol);
+}
+
+export function fetchUserTeaching(uid) {
+  const userDocRef = doc(db, 'users', uid);
+  const teachingColRef = collection(userDocRef, "teaching");
+  return getDocs(teachingColRef);
 }
