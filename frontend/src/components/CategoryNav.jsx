@@ -2,13 +2,13 @@ import React from 'react';
 
 // key값 변경
 const categories = [
-  { key: '전체', icon: '🗂️', label: '전체' },
-  { key: '프로그래밍', icon: '💻', label: '개발·프로그래밍' },
-  { key: '게임', icon: '🎮', label: '게임 개발' },
-  { key: '경제', icon: '💰', label: '경제' },
-  { key: '요리', icon: '🍳', label: '요리' },
-  { key: '디자인', icon: '🎨', label: '디자인' },
-  { key: '자기계발', icon: '🧭', label: '자기계발' },
+  { key: 'all', icon: '🗂️', label: '전체' },
+  { key: 'programming', icon: '💻', label: '프로그래밍' },
+  { key: 'game', icon: '🎮', label: '게임 개발' },
+  { key: 'economics', icon: '💰', label: '경제' },
+  { key: 'cooking', icon: '🍳', label: '요리' },
+  { key: 'design', icon: '🎨', label: '디자인' },
+  { key: 'self-development', icon: '🧭', label: '자기계발' },
 ];
 
 export default function CategoryNav({ selected, setSelected }) {

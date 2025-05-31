@@ -1,247 +1,393 @@
-import React, { useState } from 'react';
+// src/components/LessonDetails.jsx
+
+import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-
-const lessonMap = {
-  1: {
-    title: 'Python 101',
-    description: '이 강의는 Python의 기초를 다룹니다.',
-    teacher: '홍길동',
-    rating: 5.0,
-    tags: ['기초', 'Python'],
-    cost: 300,
-    lec_hrs: 5,
-    form: '오프라인',
-    chapters: [
-      { title: '챕터 1. 기초 문법', lessons: ['1. 변수와 자료형'] },
-      { title: '챕터 2. 제어문', lessons: ['1. 조건문', '2. 반복문', '3. 실습 예제'] }
-    ],
-    reviews: [
-      { name: 'Anon 1', date: '2024/12/8', stars: '★★★★★', text: 'Not bad' },
-      { name: 'Anon 2', date: '2024/12/17', stars: '★★★★★', text: 'Quite simple' }
-    ],
-    categories: [
-      'Fundamental', 
-      'Programming',
-    ],
-
-    registered: 8,
-    space: 10
-
-  },
-  2: {
-    title: 'C++ 203',
-    description: 'C++ 기초수업 입니다',
-    teacher: '이몽룡',
-    rating: 4.5,
-    tags: ['중급', 'C++'],
-    cost: 500,
-    form: '오프라인',
-    lec_hrs: 8,
-    chapters: [
-      { title: '챕터 1. 포인터 기초', lessons: ['1. 주소와 참조', '2. 포인터 연산'] },
-      { title: '챕터 2. 클래스', lessons: ['1. 캡슐화', '2. 상속'] }
-    ],
-    reviews: [
-      { name: 'Anon 1', date: '2024/12/2', stars: '★★★★★', text: 'Great!' },
-      { name: 'Anon 2', date: '2024/12/21', stars: '★★★★', text: 'Hard but rewarding.' }
-    ],
-    categories: [
-      'Fundamental', 
-      'Programming',
-    ],
-
-    registered: 7,
-    space: 15
-  },
-  3: {
-    title: 'Java Basic',
-    description: 'Java 프로그램밍 기초',
-    teacher: '이해곤',
-    rating: 2.0,
-    tags: ['중급', 'Java'],
-    cost: 800,
-    form: '온라인',
-    lec_hrs: 7,
-    chapters: [
-      { title: '챕터 1. 문법 기초', lessons: ['1. 변수와 자료형'] },
-      { title: '챕터 2. 클래스', lessons: ['1. 캡슐화', '2. 상속'] }
-    ],
-    reviews: [
-      { name: 'Anon 1', date: '2024/12/30', stars: '★', text: 'I regret for taking this.' },
-      { name: 'Anon 2', date: '2024/12/23', stars: '★★★', text: 'You\'re not going to like it.' }
-    ],
-    categories: [
-      'Intermediate', 
-      'Programming',
-    ],
-
-    registered: 0,
-    space: 20
-  }
-};
+import {
+  doc,
+  getDoc,
+  collection,
+  getDocs,
+  Timestamp,
+  updateDoc    // <-- IMPORT updateDoc here
+} from 'firebase/firestore';
+import {
+  db,
+  enroll,
+  addEnrolledShortcut
+} from '../services/firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function LessonDetails() {
   const { id } = useParams();
-  const lesson = lessonMap[id];
+  const { user: authUser } = useAuth();
+  const uid = authUser?.uid;
+
+  const [lesson, setLesson] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const [enrolled, setEnrolled] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
-  const [points, setPoints] = useState(1000);
+  const [userPoints, setUserPoints] = useState(0);
+  const [registeredCount, setRegisteredCount] = useState(0);
 
+  // 1) Fetch single lesson document from Firestore
+  useEffect(() => {
+    const fetchLesson = async () => {
+      setLoading(true);
+      try {
+        const docRef = doc(db, 'lessons', id);
+        const snap = await getDoc(docRef);
+        if (!snap.exists()) {
+          setErrorMessage('Lesson not found.');
+          setLesson(null);
+        } else {
+          setLesson({ id: snap.id, ...snap.data() });
+        }
+      } catch (err) {
+        console.error('Error fetching lesson:', err);
+        setErrorMessage('Failed to load lesson details.');
+      }
+      setLoading(false);
+    };
+
+    fetchLesson();
+  }, [id]);
+
+  // 2) Fetch current user’s pointBalance (for enrollment check)
+  useEffect(() => {
+    if (!uid) return;
+    const fetchPoints = async () => {
+      try {
+        const userSnap = await getDoc(doc(db, 'users', uid));
+        if (userSnap.exists()) {
+          setUserPoints(userSnap.data().pointBalance ?? 0);
+        }
+      } catch (err) {
+        console.error('Error fetching user points:', err);
+      }
+    };
+    fetchPoints();
+  }, [uid]);
+
+  // 3) Count how many students are already enrolled
+  useEffect(() => {
+    const fetchEnrollmentCount = async () => {
+      try {
+        const enrollColRef = collection(db, 'lessons', id, 'enrollments');
+        const snapshot = await getDocs(enrollColRef);
+        setRegisteredCount(snapshot.size);
+        // If the UID is already in that collection, mark as enrolled
+        const isAlreadyEnrolled = snapshot.docs.some((d) => d.id === uid);
+        if (isAlreadyEnrolled) {
+          setEnrolled(true);
+        }
+      } catch (err) {
+        console.error('Error fetching enrollments:', err);
+      }
+    };
+    fetchEnrollmentCount();
+  }, [id, uid]);
+
+  if (loading) {
+    return <div style={{ padding: '2rem' }}>Loading…</div>;
+  }
+  if (errorMessage) {
+    return <div style={{ color: 'red', padding: '2rem' }}>{errorMessage}</div>;
+  }
   if (!lesson) {
-    return <div style={{ color: 'white', padding: '2rem' }}>해당 강의를 찾을 수 없습니다.</div>;
+    return <div style={{ padding: '2rem' }}>Lesson not found.</div>;
   }
 
-  const handleEnroll = () => {
-    if (points >= lesson.cost) {
-      setPoints(points - lesson.cost);
+  // Destructure fields from the Firestore document
+  const {
+    title,
+    description,
+    teacherUid,
+    rating = 0,
+    tags = [],
+    cost = 0,
+    sessionType = '',
+    difficulty = '',
+    startTime,
+    createdAt,
+    capacity = 0
+  } = lesson;
+
+  // Format startTime if it is a Firestore Timestamp
+  let formattedStart = '';
+  if (startTime instanceof Timestamp) {
+    formattedStart = new Date(startTime.seconds * 1000).toLocaleString();
+  }
+
+  // Handler for “Enroll” button
+  const handleEnroll = async () => {
+    if (!uid) {
+      alert('Please log in first.');
+      return;
+    }
+    if (userPoints < cost) {
+      alert('You do not have enough points to enroll.');
+      return;
+    }
+    if (registeredCount >= capacity) {
+      alert('No seats available.');
+      return;
+    }
+
+    try {
+      // 1) Create enrollment under /lessons/{id}/enrollments/{uid}
+      await enroll(id, uid);
+
+      // 2) Add “enrolled” shortcut under /users/{uid}/enrolled/{id}
+      await addEnrolledShortcut(uid, id);
+
+      // 3) Deduct points from the user document in Firestore
+      const userDocRef = doc(db, 'users', uid);
+      await updateDoc(userDocRef, {
+        pointBalance: userPoints - cost
+      });
+
+      // 4) Update local state after successful writes
       setEnrolled(true);
       setShowConfirm(false);
-      alert('수강 신청이 완료되었습니다!');
-    } else {
-      alert('포인트가 부족합니다.');
+      setUserPoints((prev) => prev - cost);
+      setRegisteredCount((prev) => prev + 1);
+
+      alert('You have successfully enrolled in this lesson!');
+    } catch (err) {
+      console.error('Error enrolling or updating points:', err);
+      alert('An error occurred while enrolling.');
     }
   };
 
   return (
-    <div style={{ background: '#f9f9f9', color: '#000', minHeight: '100vh', fontFamily: 'sans-serif' }}>
-      <div style={{ display: 'flex', padding: '2rem', background: '#000', color: '#fff' }}>
-        <div style={{ flex: 2, display: 'flex', flexDirection: 'column', justifyContent: 'center', gap: '0.5rem' }}>
-          <h1 style={{ margin: 0, textAlign: 'left' }}>{lesson.title}</h1>
-          <p style={{ margin: 0, textAlign: 'left', minHeight: '2.5rem', }}>{lesson.description}</p>
-          <p style={{ margin: 0, textAlign: 'left' }}>👁 {lesson.registered}({lesson.space})명이 수강하고 있어요.</p>
-          <p style={{ margin: 0, textAlign: 'left' }}>👨‍🏫 Teacher: {lesson.teacher} ⭐ {lesson.rating}</p>
+    <div
+      style={{
+        background: '#f9f9f9',
+        color: '#000000',
+        minHeight: '100vh',
+        fontFamily: 'Arial, sans-serif'
+      }}
+    >
+      {/**
+       * ─── Header Section: Title + Thumbnail ─────────────────────────────────────────
+       */}
+      <div style={{ display: 'flex', padding: '2rem', background: '#000000', color: '#ffffff' }}>
+        <div
+          style={{
+            flex: 2,
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: '0.5rem'
+          }}
+        >
+          <h1 style={{ margin: 0, textAlign: 'left' }}>{title}</h1>
+          <p style={{ margin: 0, textAlign: 'left', minHeight: '2.5rem' }}>{description}</p>
+          {formattedStart && (
+            <p style={{ margin: 0, textAlign: 'left' }}>🗓️ Start Date: {formattedStart}</p>
+          )}
+          <p style={{ margin: 0, textAlign: 'left' }}>👨‍🏫 {teacherUid} ⭐ {rating.toFixed(1)}</p>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
-            {lesson.tags.map((tag, i) => (
-              <span key={i} style={{ background: '#444', color: '#fff', padding: '0.2rem 0.5rem', borderRadius: '1rem', fontSize: '0.8rem' }}>#{tag}</span>
+            {tags.map((tag, i) => (
+              <span
+                key={i}
+                style={{
+                  background: '#444444',
+                  color: '#ffffff',
+                  padding: '0.2rem 0.5rem',
+                  borderRadius: '1rem',
+                  fontSize: '0.8rem'
+                }}
+              >
+                #{tag}
+              </span>
             ))}
           </div>
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ width: '100%', height: 200, background: '#ccc', borderRadius: 8, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>Thumbnail</div>
+          <div
+            style={{
+              width: '100%',
+              height: 200,
+              background: '#cccccc',
+              borderRadius: 8,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center'
+            }}
+          >
+            Thumbnail
+          </div>
         </div>
       </div>
 
       <div style={{ display: 'flex', padding: '2rem', gap: '2rem' }}>
-        {/* Left info box */}
-        <div style={{ flex: 1, background: '#fff', padding: '1rem', borderRadius: 8, border: '1px solid #ddd' }}>
+        {/**
+         * ─── Left Info Box ─────────────────────────────────────────────────────────
+         */}
+        <div
+          style={{
+            flex: 1,
+            background: '#ffffff',
+            padding: '1rem',
+            borderRadius: 8,
+            border: '1px solid #dddddd'
+          }}
+        >
           <table style={{ width: '100%', fontSize: '0.9rem', marginBottom: '1rem' }}>
             <tbody>
-              <tr><td>Teacher</td><td>{lesson.teacher}</td></tr>
-              <tr><td>강의 수</td><td>{lesson.chapters.length} 차시</td></tr>
-              <tr><td>강의 시간</td><td>{lesson.lec_hrs} 시간</td></tr>
-              <tr><td>장소</td><td>{lesson.form}</td></tr>
-              <tr><td>Cost</td><td>{lesson.cost}pts</td></tr>
-              <tr><td>Skill</td><td>{lesson.tags.map(tag => <span key={tag} style={{ background: '#eee', padding: '2px 8px', borderRadius: 12, marginRight: 6 }}>#{tag}</span>)}</td></tr>
+              <tr>
+                <td>Teacher</td>
+                <td>{teacherUid}</td>
+              </tr>
+              <tr>
+                <td>Capacity</td>
+                <td>
+                  {registeredCount} / {capacity}
+                </td>
+              </tr>
+              <tr>
+                <td>Session Type</td>
+                <td>{sessionType}</td>
+              </tr>
+              <tr>
+                <td>Cost</td>
+                <td>{cost} pts</td>
+              </tr>
+              <tr>
+                <td>Difficulty</td>
+                <td>{difficulty}</td>
+              </tr>
             </tbody>
           </table>
+
+          {/* Enroll or Enrolled Button */}
           {!enrolled ? (
-            <button onClick={() => setShowConfirm(true)} style={{ width: '100%', background: '#00b77e', color: '#fff', padding: '0.75rem', border: 'none', borderRadius: 6 }}>수강하기</button>
+            <button
+              onClick={() => setShowConfirm(true)}
+              style={{
+                width: '100%',
+                background: '#00b77e',
+                color: '#ffffff',
+                padding: '0.75rem',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: '1rem',
+                cursor: 'pointer'
+              }}
+            >
+              Enroll ({cost} pts)
+            </button>
           ) : (
-            <button disabled style={{ width: '100%', background: '#ccc', color: '#666', padding: '0.75rem', border: 'none', borderRadius: 6 }}>수강중</button>
+            <button
+              disabled
+              style={{
+                width: '100%',
+                background: '#cccccc',
+                color: '#666666',
+                padding: '0.75rem',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: '1rem'
+              }}
+            >
+              Enrolled
+            </button>
           )}
         </div>
 
-        {/* Center Curriculum */}
-        <div style={{ flex: 2 }}>
-          {lesson.chapters.map((ch, index) => {
-            const id = `chapter-${index}`;
-            return (
-              <div key={index} style={{
-                border: '1px solid #ddd',
-                borderRadius: '6px',
-                marginBottom: '1rem'
-              }}>
-                <div
-                  onClick={() => {
-                    const content = document.getElementById(id);
-                    const icon = document.getElementById(`icon-${index}`);
-                    const isOpen = content.style.display === 'block';
-                    content.style.display = isOpen ? 'none' : 'block';
-                    icon.innerText = isOpen ? '▶' : '▼';
-                  }}
-                  style={{
-                    backgroundColor: '#ffffff',
-                    padding: '1rem',
-                    cursor: 'pointer',
-                    fontWeight: 'bold',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    borderTopLeftRadius: '6px',
-                    borderTopRightRadius: '6px'
-                  }}
-                >
-                  <span style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                    <span id={`icon-${index}`} style={{ fontSize: '1.2rem' }}>▶</span>
-                    {ch.title}
-                  </span>
-                  <span>{ch.lessons.length}개</span>
-                </div>
-                <div id={id} style={{
-                  display: 'none',
-                  padding: '1rem',
-                  backgroundColor: '#ffffff',
-                  borderBottomLeftRadius: '6px',
-                  borderBottomRightRadius: '6px'
-                }}>
-                  <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                    {ch.lessons.map((lsn, idx) => (
-                      <li key={idx} style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        alignItems: 'center',
-                        padding: '0.25rem 0'
-                      }}>
-                        <span>{lsn}</span>
-                        <span style={{ fontSize: '0.85rem', color: '#666' }}>16:29</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
-            );
-          })}
+        {/**
+         * ─── Center: (No chapters section, since you said "omit lecture hours")
+         */}
+        <div style={{ flex: 2, background: '#ffffff', padding: '1rem', borderRadius: 8, border: '1px solid #dddddd' }}>
+          <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Lesson Details</h2>
+          <p style={{ marginBottom: '1rem', lineHeight: 1.5 }}>{description}</p>
+          <p style={{ marginBottom: '0.5rem' }}>
+            <strong>Start Date & Time:</strong> {formattedStart || 'TBD'}
+          </p>
+          <p style={{ marginBottom: '0.5rem' }}>
+            <strong>Session Type:</strong> {sessionType}
+          </p>
+          <p style={{ marginBottom: '0.5rem' }}>
+            <strong>Difficulty Level:</strong> {difficulty}
+          </p>
+          <p style={{ marginBottom: '0.5rem' }}>
+            <strong>Cost:</strong> {cost} points
+          </p>
+          <p style={{ marginBottom: '0.5rem' }}>
+            <strong>Capacity:</strong> {registeredCount} / {capacity} students
+          </p>
         </div>
-        {/* <div style={{ flex: 2 }}>
-          {lesson.chapters.map((ch, idx) => (
-            <details key={idx} style={{ background: '#fff', padding: '1rem', borderRadius: 8, marginBottom: '1rem', border: '1px solid #ddd' }}>
-              <summary style={{ cursor: 'pointer', fontWeight: 'bold' }}>{ch.title}</summary>
-              <ul style={{ paddingLeft: '1rem' }}>
-                {ch.lessons.map((lsn, i) => (
-                  <li key={i} style={{ marginTop: 6 }}>{lsn}</li>
-                ))}
-              </ul>
-            </details>
-          ))}
-        </div> */}
 
-        {/* Right reviews */}
+        {/**
+         * ─── Right Reviews / Comments (placeholder) ─────────────────────────────────
+         */}
         <div style={{ flex: 1 }}>
-          {lesson.reviews.map((r, i) => (
-            <div key={i} style={{ background: '#fff', padding: '1rem', borderRadius: 8, border: '1px solid #ddd', marginBottom: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                <div style={{ width: 40, height: 40, background: '#ccc', borderRadius: '50%' }}></div>
-                <div>
-                  <strong>{r.name}</strong>
-                  <div style={{ fontSize: '0.8rem', color: '#888' }}>{r.date}</div>
-                </div>
-              </div>
-              <div style={{ color: '#f5c518', marginTop: '0.5rem', textAlign: 'left' }}>{r.stars}</div>
-              {r.text.split('\n').map((line, i) => <p key={i} style={{ marginTop: 6, textAlign: 'left' }}>{line}</p>)}
-            </div>
-          ))}
+          <p style={{ color: '#777777', fontStyle: 'italic' }}>No reviews available.</p>
         </div>
       </div>
 
-      {/* Modal */}
+      {/**
+       * ─── Confirmation Modal for Enrollment ──────────────────────────────────────
+       */}
       {showConfirm && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', justifyContent: 'center', alignItems: 'center', zIndex: 1000 }}>
-          <div style={{ background: '#fff', padding: '2rem', borderRadius: 8, width: 300, textAlign: 'center' }}>
-            <h3>수강 확인</h3>
-            <p>현재 포인트: {points} pt</p>
-            <p>수강 후 남는 포인트: {points - lesson.cost} pt</p>
-            <button onClick={handleEnroll} style={{ marginTop: '1rem', background: '#00b77e', color: '#fff', padding: '0.5rem 1rem', border: 'none', borderRadius: 6 }}>수강 확인</button>
-            <button onClick={() => setShowConfirm(false)} style={{ marginLeft: '1rem', padding: '0.5rem 1rem' }}>취소</button>
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              padding: '2rem',
+              borderRadius: 8,
+              width: 300,
+              textAlign: 'center'
+            }}
+          >
+            <h3>Confirm Enrollment</h3>
+            <p>
+              Current Points: <strong>{userPoints} pts</strong>
+            </p>
+            <p>
+              Points After Enrollment: <strong>{userPoints - cost} pts</strong>
+            </p>
+            <button
+              onClick={handleEnroll}
+              style={{
+                marginTop: '1rem',
+                background: '#00b77e',
+                color: '#ffffff',
+                padding: '0.5rem 1rem',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: '1rem',
+                cursor: 'pointer'
+              }}
+            >
+              Confirm
+            </button>
+            <button
+              onClick={() => setShowConfirm(false)}
+              style={{
+                marginLeft: '1rem',
+                padding: '0.5rem 1rem',
+                fontSize: '1rem',
+                cursor: 'pointer'
+              }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
