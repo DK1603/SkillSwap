@@ -7,6 +7,7 @@ import LessonDetails from './components/LessonDetails';
 import Dashboard from './components/Dashboard';
 import Chats from './components/Chats';
 import Login from './components/Login';
+import Signup from './components/Signup';
 import CreateLesson from './components/CreateLesson';
 import './App.css';
 
@@ -23,6 +24,8 @@ export default function App() {
         <Route path="/" element={<LessonFeed />} />
         <Route path="/lesson/:id" element={<LessonDetails />} />
         <Route path="/login" element={<Login />} />
+        <Route path="/signup" element={<Signup />} />
+
         <Route
           path="/dashboard"
           element={
