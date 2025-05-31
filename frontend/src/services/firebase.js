@@ -12,12 +12,7 @@ import {
   doc,
   getDocs,
   onSnapshot,
-  addDoc,
-  setDoc,
-  deleteDoc,
-  serverTimestamp,
-  query,
-  orderBy
+  doc,
 } from 'firebase/firestore';
 
 const firebaseConfig = {
@@ -45,6 +40,29 @@ export const onAuthChange = cb =>
 
 // Lessons
 const lessonsCol = collection(db, 'lessons');
+const usersCol = collection(db, 'users');
+
+export function fetchLessons() {
+  return getDocs(lessonsCol);
+}
+
+export function onLessonsSnapshot(cb) {
+  return onSnapshot(lessonsCol, cb);
+}
+
+export function createLesson(data) {
+  return addDoc(lessonsCol, data);
+}
+
+export function fetchUsers() {
+  return getDocs(usersCol);
+}
+
+export function fetchUserTeaching(uid) {
+  const userDocRef = doc(db, 'users', uid);
+  const teachingColRef = collection(userDocRef, "teaching");
+  return getDocs(teachingColRef);
+}
 export const createLesson = data =>
   addDoc(lessonsCol, { ...data, createdAt: serverTimestamp() });
 export const fetchLessonsOnce = () =>
