@@ -57,7 +57,7 @@ export default function Chats() {
     // force update
     setInput(prev => prev);
   };
-
+  
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Arial, sans-serif' }}>
       {/* Sidebar */}

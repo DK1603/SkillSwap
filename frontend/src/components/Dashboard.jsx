@@ -9,6 +9,7 @@ export default function Dashboard() {
       <div style={{ width: 200, textAlign: 'center' }}>
         <img src='profile.svg' style={{width: 120, height: 120}}/>
         <h3>{user.name}</h3>
+        
         <p>Your points: </p>
         <Link to="/create">
           <button style={{ marginTop: '1rem', padding: '0.5rem 1rem' }}>Create Lesson</button>

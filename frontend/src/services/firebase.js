@@ -1,57 +1,87 @@
+// src/services/firebase.js
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
   signInWithEmailAndPassword,
   signOut,
-  onAuthStateChanged        // ← import this
+  onAuthStateChanged
 } from 'firebase/auth';
 import {
   getFirestore,
   collection,
-  addDoc,
+  doc,
   getDocs,
   onSnapshot,
+  addDoc,
+  setDoc,
+  deleteDoc,
+  serverTimestamp,
+  query,
+  orderBy
 } from 'firebase/firestore';
 
 const firebaseConfig = {
-    apiKey: "AIzaSyBsrHV--l-LFHls3HMjy7XQMmxKg04MCc0",
-    authDomain: "skillswap-e10d6.firebaseapp.com",
-    projectId: "skillswap-e10d6",
-    storageBucket: "skillswap-e10d6.firebasestorage.app",
-    messagingSenderId: "607068548148",
-    appId: "1:607068548148:web:c5939bcbb0055a2b402e61",
-    measurementId: "G-SV8BZEC5RX"
-  };
+  apiKey: "AIzaSyBsrHV--l-LFHls3HMjy7XQMmxKg04MCc0",
+  authDomain: "skillswap-e10d6.firebaseapp.com",
+  projectId: "skillswap-e10d6",
+  storageBucket: "skillswap-e10d6.firebasestorage.app",
+  messagingSenderId: "607068548148",
+  appId: "1:607068548148:web:c5939bcbb0055a2b402e61",
+  measurementId: "G-SV8BZEC5RX"
+};
 
 const app = initializeApp(firebaseConfig);
 export const auth = getAuth(app);
-export const db = getFirestore(app);
+export const db   = getFirestore(app);
 
-// Auth helpers
-export function loginWithEmail(email, password) {
-  return signInWithEmailAndPassword(auth, email, password);
-}
+// Auth
+export const loginWithEmail = (email, pass) =>
+  signInWithEmailAndPassword(auth, email, pass);
 
-export function logout() {
-  return signOut(auth);
-}
+export const logout = () => signOut(auth);
 
-// **Add this** — wrap Firebase’s onAuthStateChanged:
-export function onAuthChange(callback) {
-  return onAuthStateChanged(auth, callback);
-}
+export const onAuthChange = cb =>
+  onAuthStateChanged(auth, cb);
 
-// Firestore helpers
+// Lessons
 const lessonsCol = collection(db, 'lessons');
+export const createLesson = data =>
+  addDoc(lessonsCol, { ...data, createdAt: serverTimestamp() });
+export const fetchLessonsOnce = () =>
+  getDocs(query(lessonsCol, orderBy('createdAt','desc')));
+export const watchLessons = cb =>
+  onSnapshot(query(lessonsCol, orderBy('createdAt','desc')), cb);
 
-export function fetchLessons() {
-  return getDocs(lessonsCol);
-}
+// Enrollments (under each lesson)
+export const enroll = (lessonId, uid) =>
+  setDoc(doc(lessonsCol, lessonId, 'enrollments', uid), {
+    enrolledAt: serverTimestamp()
+  });
+export const cancelEnrollment = (lessonId, uid) =>
+  deleteDoc(doc(lessonsCol, lessonId, 'enrollments', uid));
 
-export function onLessonsSnapshot(cb) {
-  return onSnapshot(lessonsCol, cb);
-}
+// Profile shortcuts
+export const watchTeaching = (uid, cb) =>
+  onSnapshot(collection(db, 'users', uid, 'teaching'), cb);
+export const watchEnrolled = (uid, cb) =>
+  onSnapshot(collection(db, 'users', uid, 'enrolled'), cb);
+export const addTeachingShortcut = (uid, lessonId) =>
+  setDoc(doc(db, 'users', uid, 'teaching', lessonId), { linkedAt: serverTimestamp() });
+export const addEnrolledShortcut = (uid, lessonId) =>
+  setDoc(doc(db, 'users', uid, 'enrolled', lessonId), { linkedAt: serverTimestamp() });
 
-export function createLesson(data) {
-  return addDoc(lessonsCol, data);
-}
+// Chats (one-on-one)
+export const startChat = async (me, you) => {
+  // for demo: always create a new chat
+  const ref = await addDoc(collection(db, 'chats'), {
+    members: [me, you],
+    createdAt: serverTimestamp()
+  });
+  return ref.id;
+};
+export const sendMessage = (chatId, authorUid, text) =>
+  addDoc(collection(db, 'chats', chatId, 'messages'), {
+    authorUid, text, sentAt: serverTimestamp()
+  });
+export const watchMessages = (chatId, cb) =>
+  onSnapshot(query(collection(db, 'chats', chatId, 'messages'), orderBy('sentAt')), cb);
