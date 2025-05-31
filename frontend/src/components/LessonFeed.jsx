@@ -1,16 +1,19 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import CategoryNav from '../components/CategoryNav';
 
 export default function LessonFeed() {
   const navigate = useNavigate();
   const staticLessons = [
-    { id: '1', title: 'Python 101', author: '홍길동', rating: 4.5, students: 13300 },
-    { id: '2', title: 'C++ 203', author: '이몽룡', rating: 5.0, students: 10200 },
-    { id: '3', title: 'Java Basic', author: '이해곤', rating: 2.0, students: 5 }
+    { id: '1', title: 'Python 101', author: '홍길동', rating: 4.5, students: 13300, tags: ['프로그래밍'] },
+    { id: '2', title: 'C++ 203', author: '이몽룡', rating: 3.9, students: 10200, tags: ['프로그래밍'] },
+    { id: '3', title: 'Java Basic', author: '이해곤', rating: 2.0, students: 5, tags: ['프로그래밍'] },
+    { id: '4', title: 'How to Cook Pasta', author: '이연복', rating: 5.0, students: 50, tags: ['요리'] },
   ];
 
   const [lessons] = useState(staticLessons);
-  const [sortMode, setSortMode] = useState('rating'); // 'rating' or 'students'
+  const [sortMode, setSortMode] = useState('rating');
+  const [selectedTag, setSelectedTag] = useState(null);
 
   const sortedLessons = [...lessons].sort((a, b) => {
     if (sortMode === 'rating') return b.rating - a.rating;
@@ -18,9 +21,15 @@ export default function LessonFeed() {
     return 0;
   });
 
+const filteredLessons = selectedTag && selectedTag !== '전체'
+  ? sortedLessons.filter(l => l.tags?.includes(selectedTag))
+  : sortedLessons;
+
   return (
     <div style={{ background: '#fff', minHeight: '100vh', padding: '2rem' }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
+        <CategoryNav selected={selectedTag} setSelected={setSelectedTag} />
+
         {/* 상단 정렬 옵션 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
           <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
@@ -28,7 +37,7 @@ export default function LessonFeed() {
               <img src="src/assets/filter_icon.png" alt="filter" style={{ width: '20px', height: '20px' }} />
               <strong>필터</strong>
             </span>
-            <select value={sortMode} onChange={(e) => setSortMode(e.target.value)} style={{ padding: '0.3rem 0.5rem', fontSize: '1rem', borderRadius: '6px' }}> setSortMode(e.target.value)
+            <select value={sortMode} onChange={(e) => setSortMode(e.target.value)} style={{ padding: '0.3rem 0.5rem', fontSize: '1rem', borderRadius: '6px' }}>
               <option value="rating">평점순</option>
               <option value="students">인기순</option>
             </select>
@@ -41,7 +50,7 @@ export default function LessonFeed() {
           gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
           gap: '1.5rem',
         }}>
-          {sortedLessons.map(lesson => (
+          {filteredLessons.map(lesson => (
             <div
               key={lesson.id}
               onClick={() => navigate(`/lesson/${lesson.id}`)}
