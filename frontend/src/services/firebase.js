@@ -148,6 +148,12 @@ export function addEnrolledShortcut(uid, lessonId) {
   const enrolledDocRef = doc(db, 'users', uid, 'enrolled', lessonId);
   return setDoc(enrolledDocRef, { linkedAt: serverTimestamp() });
 }
+// ─── 7.5. Delete “enrolled” shortcut ────────────────────────────────────────────
+//    (so that /users/{uid}/enrolled/{lessonId} is removed when cancelling)
+export function deleteEnrolledShortcut(uid, lessonId) {
+  const enrolledDocRef = doc(db, 'users', uid, 'enrolled', lessonId);
+  return deleteDoc(enrolledDocRef);
+}
 
 // ─── 8. Firestore: Chats Collection ──────────────────────────────────────────────
 export async function startChat(meUid, youUid) {
