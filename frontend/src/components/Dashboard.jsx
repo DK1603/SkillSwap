@@ -3,25 +3,22 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
-  db,
   watchTeaching,
-  watchEnrolled
+  watchEnrolled,
+  fetchLessonsOnce,
+  cancelEnrollment,
+  deleteEnrolledShortcut            // → CHANGED: import the new helper
 } from '../services/firebase';
-import {
-  getDoc,
-  doc,
-  updateDoc,
-  getDocs,
-  collection
-} from 'firebase/firestore';
-import { fetchLessonsOnce } from '../services/firebase';
-import { Link } from 'react-router-dom';
+import { getDoc, doc, updateDoc, collection } from 'firebase/firestore';
+import { db } from '../services/firebase';     // to get /users/{uid}
+import { Link, useNavigate } from 'react-router-dom';
 
 export default function Dashboard() {
   const { user: authUser } = useAuth(); // Firebase Auth user
   const uid = authUser?.uid;
+  const navigate = useNavigate();
 
-  // Local state
+  // ─── Local state ───────────────────────────────────────────────────────────────
   const [profileData, setProfileData] = useState({
     displayName: '',
     photoURL: '',
@@ -29,33 +26,30 @@ export default function Dashboard() {
   });
   const [editing, setEditing] = useState(false);
 
-  // Arrays of lesson‐detail objects
-  const [teachingLessons, setTeachingLessons] = useState([]);
-  const [enrolledLessons, setEnrolledLessons] = useState([]);
+  const [teachingLessons, setTeachingLessons] = useState([]);   // { id, …lessonData }
+  const [enrolledLessons, setEnrolledLessons] = useState([]);   // { id, …lessonData }
 
-  // 1) Load user profile doc (/users/{uid}) on mount + whenever uid changes:
+  // Which lesson’s modal is open? null = no modal
+  const [showModalFor, setShowModalFor] = useState(null);
+
+  // ─── NEW: “Toast” message state ────────────────────────────────────────────────
+  // We’ll use this to show a styled success/error message instead of window.alert
+  const [toastMessage, setToastMessage] = useState('');
+
+  // ─── 1) Load /users/{uid} into profileData ────────────────────────────────────
   useEffect(() => {
     if (!uid) return;
     const userDocRef = doc(db, 'users', uid);
-
-    // We can use getDoc once; if you want realtime updates, swap in onSnapshot.
     getDoc(userDocRef).then((snap) => {
       if (snap.exists()) {
         setProfileData(snap.data());
       } else {
-        // If user doc doesn’t exist yet, create a default one.
-        // (Optional helper—uncomment if you want to auto‐create)
-        // setDoc(userDocRef, {
-        //   displayName: authUser.displayName || '',
-        //   photoURL: authUser.photoURL || '',
-        //   pointBalance: 100,            // default points
-        // });
-        console.warn('User doc not found; please create /users/' + uid);
+        console.warn('No user doc exists at /users/' + uid);
       }
     });
   }, [uid]);
 
-  // 2) When profileData.editing is toggled off, save changes to Firestore:
+  // Save profile changes when “Save” is clicked
   const handleProfileSave = async () => {
     if (!uid) return;
     const userDocRef = doc(db, 'users', uid);
@@ -67,21 +61,19 @@ export default function Dashboard() {
       setEditing(false);
     } catch (err) {
       console.error('Failed to update profile:', err);
+      showToast('Error updating profile: ' + err.message);
     }
   };
 
-  // 3) Watch “teaching” shortcuts: /users/{uid}/teaching
-  //    that stores a doc with lessonId = ID of lesson they created.
+  // ─── 2) Subscribe to /users/{uid}/teaching ───────────────────────────────────
   useEffect(() => {
     if (!uid) return;
     const unsubscribe = watchTeaching(uid, async (snapshot) => {
-      // snapshot.docs are the “teaching” shortcut docs (IDs = lesson IDs)
       const lessonIds = snapshot.docs.map(d => d.id);
       if (lessonIds.length === 0) {
         setTeachingLessons([]);
         return;
       }
-      // Now fetch those lesson docs (batched)
       const fetched = await fetchLessonsOnce();
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
       setTeachingLessons(allLessons.filter(l => lessonIds.includes(l.id)));
@@ -89,7 +81,7 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [uid]);
 
-  // 4) Watch “enrolled” shortcuts: /users/{uid}/enrolled
+  // ─── 3) Subscribe to /users/{uid}/enrolled ───────────────────────────────────
   useEffect(() => {
     if (!uid) return;
     const unsubscribe = watchEnrolled(uid, async (snapshot) => {
@@ -98,7 +90,6 @@ export default function Dashboard() {
         setEnrolledLessons([]);
         return;
       }
-      // Re‐fetch all lessons then filter
       const fetched = await fetchLessonsOnce();
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
       setEnrolledLessons(allLessons.filter(l => lessonIds.includes(l.id)));
@@ -106,7 +97,74 @@ export default function Dashboard() {
     return () => unsubscribe();
   }, [uid]);
 
-  // If not logged in, show a simple message
+  // ─── NEW: showToast helper ───────────────────────────────────────────────────
+  // Sets toastMessage for 3 seconds, then clears it
+  const showToast = (msg) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(''), 3000);
+  };
+
+  // ─── 4) Modal‐related handlers ───────────────────────────────────────────────
+
+  // “View” clicked on an enrolled lesson → open the modal
+  const handleViewClick = (lessonObj) => {
+    setShowModalFor(lessonObj);
+  };
+
+  // Close the modal
+  const closeModal = () => {
+    setShowModalFor(null);
+  };
+
+  // ─── “Delete Enrollment” flow ────────────────────────────────────────────────
+  const handleDeleteEnrollment = async (lessonObj) => {
+    // 1) Prompt for reason
+    const reason = window.prompt('Please enter a reason for canceling this enrollment:');
+    if (reason === null) {
+      // User pressed “Cancel” in the prompt → do nothing
+      return;
+    }
+    if (reason.trim() === '') {
+      showToast('Cancellation reason cannot be empty.');
+      return;
+    }
+
+    try {
+      // 2.a) Delete from /lessons/{lessonId}/enrollments/{uid}
+      await cancelEnrollment(lessonObj.id, uid);
+
+      // 2.b) ALSO delete the “enrolled” shortcut at /users/{uid}/enrolled/{lessonId}
+      await deleteEnrolledShortcut(uid, lessonObj.id);
+
+      // 3) Remove the lesson immediately from local state
+      setEnrolledLessons((prev) => prev.filter(l => l.id !== lessonObj.id));
+
+      // 4) Show a React “toast” message
+      showToast('Enrollment has been canceled successfully.');
+      closeModal();
+    } catch (err) {
+      console.error('Error deleting enrollment:', err);
+      if (err.code === 'permission-denied') {
+        showToast('You can only cancel an enrollment 2+ minutes after enrolling.');
+      } else {
+        showToast('Failed to delete enrollment: ' + err.message);
+      }
+    }
+  };
+
+  // ─── “Contact Teacher (Chat)” → navigate to a chat route ─────────────────────
+  const handleContact = (lessonObj) => {
+    const teacherId = lessonObj.teacherUid;
+    navigate(`/chats?member=${teacherId}`);
+    closeModal();
+  };
+
+  // ─── “View in Lesson Feed” → navigate to /lesson/{lessonId} ─────────────────
+  const handleViewInFeed = (lessonObj) => {
+    navigate(`/lesson/${lessonObj.id}`);
+    closeModal();
+  };
+
   if (!authUser) {
     return (
       <div style={{ padding: '2rem' }}>
@@ -116,30 +174,27 @@ export default function Dashboard() {
   }
 
   return (
-    <div style={{ padding: '2rem', display: 'flex', gap: '2rem', fontFamily: '"Segoe UI", sans-serif' }}>
-      {/* ------------------------- */}
-      {/* Left Sidebar: Profile */}
-      {/* ------------------------- */}
-      <div
-        style={{
-          width: 220,
-          textAlign: 'center',
-          border: '1px solid #ddd',
-          borderRadius: 6,
-          padding: '1rem',
-          boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
-        }}
-      >
+    <div style={{
+      padding: '2rem',
+      display: 'flex',
+      gap: '2rem',
+      background: '#121212',
+      color: '#ffffff',
+      minHeight: '100vh'
+    }}>
+      {/* ─── Left Sidebar: Profile ────────────────────────────────────────────── */}
+      <div style={{
+        width: 240,
+        textAlign: 'center',
+        border: '1px solid #333',
+        borderRadius: 8,
+        padding: '1rem',
+        background: '#1e1e1e'
+      }}>
         <img
-          src={profileData.photoURL || '/profile-placeholder.png'}
+          src={profileData.photoURL || '/assets/profile-placeholder.png'}
           alt="Profile"
-          style={{
-            width: 96,
-            height: 96,
-            borderRadius: '50%',
-            objectFit: 'cover',
-            marginBottom: '0.5rem'
-          }}
+          style={{ width: 96, height: 96, borderRadius: '50%', objectFit: 'cover', marginBottom: '0.5rem' }}
         />
         {editing ? (
           <>
@@ -180,12 +235,12 @@ export default function Dashboard() {
                 padding: '0.5rem 1rem',
                 borderRadius: 4,
                 cursor: 'pointer',
-                fontSize: '0.9rem'
+                fontSize: '0.9rem',
+                marginRight: '0.5rem'
               }}
             >
               Save
             </button>
-            &nbsp;
             <button
               onClick={() => setEditing(false)}
               style={{
@@ -204,7 +259,9 @@ export default function Dashboard() {
         ) : (
           <>
             <h3 style={{ margin: '0.5rem 0' }}>{profileData.displayName || 'No Name'}</h3>
-            <p style={{ margin: '0.25rem 0', color: '#555' }}>Points: {profileData.pointBalance ?? 0}</p>
+            <p style={{ margin: '0.25rem 0', color: '#00bcd4' }}>
+              Points: {profileData.pointBalance ?? 0}
+            </p>
             <button
               onClick={() => setEditing(true)}
               style={{
@@ -220,7 +277,7 @@ export default function Dashboard() {
             >
               Edit Profile
             </button>
-            <hr style={{ margin: '1rem 0' }} />
+            <hr style={{ margin: '1rem 0', borderColor: '#333' }} />
             <Link to="/create">
               <button
                 style={{
@@ -240,41 +297,44 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ------------------------- */}
-      {/* Right Panel: Lessons */}
-      {/* ------------------------- */}
+      {/* ─── Right Panel: Dashboard Content ────────────────────────────────────── */}
       <div style={{ flex: 1 }}>
-        <h2 style={{ marginBottom: '1rem', color: '#333' }}>Dashboard</h2>
+        <h2 style={{ marginBottom: '1rem', color: '#ccc' }}>Dashboard</h2>
 
         {/* --- My Upcoming (Enrolled) Lessons --- */}
         <section style={{ marginBottom: '2rem' }}>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>My Upcoming Lessons</h3>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: '#bbb' }}>
+            My Upcoming Lessons
+          </h3>
           {enrolledLessons.length === 0 ? (
             <p style={{ color: '#777' }}>You’re not enrolled in any lessons.</p>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0 }}>
-              {enrolledLessons.map(lesson => (
-                <li
-                  key={lesson.id}
-                  style={{
-                    padding: '0.75rem 1rem',
-                    border: '1px solid #eee',
-                    borderRadius: 4,
-                    marginBottom: '0.5rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <div>
-                    <strong style={{ color: '#333' }}>{lesson.title}</strong>
-                    <br />
-                    <small style={{ color: '#666' }}>
-                      {new Date(lesson.startTime.seconds * 1000).toLocaleString()}
-                    </small>
-                  </div>
-                  <Link to={`/lesson/${lesson.id}`}>
+              {enrolledLessons.map(lesson => {
+                const startTime = lesson.startTime && lesson.startTime.seconds
+                  ? new Date(lesson.startTime.seconds * 1000).toLocaleString()
+                  : 'TBD';
+                return (
+                  <li
+                    key={lesson.id}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      border: '1px solid #333',
+                      borderRadius: 4,
+                      marginBottom: '0.5rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: '#1f1f1f'
+                    }}
+                  >
+                    <div>
+                      <strong style={{ color: '#fff' }}>{lesson.title}</strong>
+                      <br />
+                      <small style={{ color: '#aaa' }}>{startTime}</small>
+                    </div>
                     <button
+                      onClick={() => handleViewClick(lesson)}
                       style={{
                         backgroundColor: '#2980b9',
                         color: '#fff',
@@ -287,64 +347,181 @@ export default function Dashboard() {
                     >
                       View
                     </button>
-                  </Link>
-                </li>
-              ))}
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
 
         {/* --- My Lessons (Teaching) --- */}
         <section style={{ marginBottom: '2rem' }}>
-          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem' }}>My Lessons (Teaching)</h3>
+          <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: '#bbb' }}>
+            My Lessons (Teaching)
+          </h3>
           {teachingLessons.length === 0 ? (
             <p style={{ color: '#777' }}>You haven’t created any lessons yet.</p>
           ) : (
             <ul style={{ listStyle: 'none', padding: 0 }}>
-              {teachingLessons.map(lesson => (
-                <li
-                  key={lesson.id}
-                  style={{
-                    padding: '0.75rem 1rem',
-                    border: '1px solid #eee',
-                    borderRadius: 4,
-                    marginBottom: '0.5rem',
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center'
-                  }}
-                >
-                  <div>
-                    <strong style={{ color: '#333' }}>{lesson.title}</strong>
-                    <br />
-                    <small style={{ color: '#666' }}>
-                      {new Date(lesson.createdAt.seconds * 1000).toLocaleString()}
-                    </small>
-                  </div>
-                  <Link to={`/lesson/${lesson.id}`}>
-                    <button
-                      style={{
-                        backgroundColor: '#8e44ad',
-                        color: '#fff',
-                        border: 'none',
-                        padding: '0.4rem 0.8rem',
-                        borderRadius: 4,
-                        cursor: 'pointer',
-                        fontSize: '0.85rem'
-                      }}
-                    >
-                      Edit
-                    </button>
-                  </Link>
-                </li>
-              ))}
+              {teachingLessons.map(lesson => {
+                const createdAt = lesson.createdAt && lesson.createdAt.seconds
+                  ? new Date(lesson.createdAt.seconds * 1000).toLocaleString()
+                  : 'TBD';
+                return (
+                  <li
+                    key={lesson.id}
+                    style={{
+                      padding: '0.75rem 1rem',
+                      border: '1px solid #333',
+                      borderRadius: 4,
+                      marginBottom: '0.5rem',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      background: '#1f1f1f'
+                    }}
+                  >
+                    <div>
+                      <strong style={{ color: '#fff' }}>{lesson.title}</strong>
+                      <br />
+                      <small style={{ color: '#aaa' }}>{createdAt}</small>
+                    </div>
+                    <Link to={`/lesson/${lesson.id}`}>
+                      <button
+                        style={{
+                          backgroundColor: '#8e44ad',
+                          color: '#fff',
+                          border: 'none',
+                          padding: '0.4rem 0.8rem',
+                          borderRadius: 4,
+                          cursor: 'pointer',
+                          fontSize: '0.85rem'
+                        }}
+                      >
+                        Edit
+                      </button>
+                    </Link>
+                  </li>
+                );
+              })}
             </ul>
           )}
         </section>
-
-        {/* --- Edit Profile Section (Optional Duplicate) --- */}
-        {/* You could remove this since we have inline editing above */}
       </div>
+
+      {/* ─── Modal Popup (conditionally rendered) ─────────────────────────────────── */}
+      {showModalFor && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000
+        }}>
+          <div style={{
+            background: '#1f1f1f',
+            borderRadius: 8,
+            width: '90%',
+            maxWidth: 380,
+            padding: '1.5rem',
+            color: '#fff',
+            position: 'relative',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+          }}>
+            {/* Close “X” */}
+            <button
+              onClick={closeModal}
+              style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                background: 'transparent',
+                border: 'none',
+                color: '#aaa',
+                fontSize: '1.2rem',
+                cursor: 'pointer'
+              }}
+            >
+              &times;
+            </button>
+
+            <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>
+              {showModalFor.title}
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              {/* 1) Contact Teacher (Chat) */}
+              <button
+                onClick={() => handleContact(showModalFor)}
+                style={{
+                  backgroundColor: '#28a745',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '0.6rem',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: '1rem'
+                }}
+              >
+                Contact Teacher (Chat)
+              </button>
+
+              {/* 2) Delete Enrollment */}
+              <button
+                onClick={() => handleDeleteEnrollment(showModalFor)}
+                style={{
+                  backgroundColor: '#dc3545',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '0.6rem',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: '1rem'
+                }}
+              >
+                Delete Enrollment
+              </button>
+
+              {/* 3) View in Lesson Feed */}
+              <button
+                onClick={() => handleViewInFeed(showModalFor)}
+                style={{
+                  backgroundColor: '#17a2b8',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '0.6rem',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: '1rem'
+                }}
+              >
+                View in Lesson Feed
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ─── NEW: Toast container ─────────────────────────────────────────────────── */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: 20,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          backgroundColor: '#333',
+          color: '#fff',
+          padding: '0.75rem 1.5rem',
+          borderRadius: 4,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.3)',
+          zIndex: 3000,
+          fontSize: '0.9rem'
+        }}>
+          {toastMessage}
+        </div>
+      )}
     </div>
   );
 }
