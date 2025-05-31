@@ -67,3 +67,43 @@ export function fetchUserTeaching(uid) {
   const teachingColRef = collection(userDocRef, "teaching");
   return getDocs(teachingColRef);
 }
+export const createLesson = data =>
+  addDoc(lessonsCol, { ...data, createdAt: serverTimestamp() });
+export const fetchLessonsOnce = () =>
+  getDocs(query(lessonsCol, orderBy('createdAt','desc')));
+export const watchLessons = cb =>
+  onSnapshot(query(lessonsCol, orderBy('createdAt','desc')), cb);
+
+// Enrollments (under each lesson)
+export const enroll = (lessonId, uid) =>
+  setDoc(doc(lessonsCol, lessonId, 'enrollments', uid), {
+    enrolledAt: serverTimestamp()
+  });
+export const cancelEnrollment = (lessonId, uid) =>
+  deleteDoc(doc(lessonsCol, lessonId, 'enrollments', uid));
+
+// Profile shortcuts
+export const watchTeaching = (uid, cb) =>
+  onSnapshot(collection(db, 'users', uid, 'teaching'), cb);
+export const watchEnrolled = (uid, cb) =>
+  onSnapshot(collection(db, 'users', uid, 'enrolled'), cb);
+export const addTeachingShortcut = (uid, lessonId) =>
+  setDoc(doc(db, 'users', uid, 'teaching', lessonId), { linkedAt: serverTimestamp() });
+export const addEnrolledShortcut = (uid, lessonId) =>
+  setDoc(doc(db, 'users', uid, 'enrolled', lessonId), { linkedAt: serverTimestamp() });
+
+// Chats (one-on-one)
+export const startChat = async (me, you) => {
+  // for demo: always create a new chat
+  const ref = await addDoc(collection(db, 'chats'), {
+    members: [me, you],
+    createdAt: serverTimestamp()
+  });
+  return ref.id;
+};
+export const sendMessage = (chatId, authorUid, text) =>
+  addDoc(collection(db, 'chats', chatId, 'messages'), {
+    authorUid, text, sentAt: serverTimestamp()
+  });
+export const watchMessages = (chatId, cb) =>
+  onSnapshot(query(collection(db, 'chats', chatId, 'messages'), orderBy('sentAt')), cb);
