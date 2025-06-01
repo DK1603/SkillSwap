@@ -7,11 +7,23 @@ import {
   watchEnrolled,
   fetchLessonsOnce,
   cancelEnrollment,
-  deleteEnrolledShortcut            // → CHANGED: import the new helper
+  deleteEnrolledShortcut,            // → CHANGED: import the new helper
+  fetchUserTeaching
 } from '../services/firebase';
 import { getDoc, doc, updateDoc, collection } from 'firebase/firestore';
 import { db } from '../services/firebase';     // to get /users/{uid}
 import { Link, useNavigate } from 'react-router-dom';
+import Select from 'react-select';
+
+const categories = [
+  { value: 'programming', icon: '💻', label: '프로그래밍' },
+  { value: 'economics', icon: '💰', label: '경제' },
+  { value: 'math', icon: '➗', label: '수학' },
+  { value: 'science', icon: '🔬', label: '과학'},
+  { value: 'cooking', icon: '🍳', label: '요리' },
+  { value: 'design', icon: '🎨', label: '디자인' },
+  { value: 'self-development', icon: '🧭', label: '자기계발' },
+];
 
 export default function Dashboard() {
   const { user: authUser } = useAuth(); // Firebase Auth user
@@ -31,6 +43,8 @@ export default function Dashboard() {
 
   // Which lesson’s modal is open? null = no modal
   const [showModalFor, setShowModalFor] = useState(null);
+  const [showModalMylessonFor, setShowModalMylessonFor] = useState(null);
+  const [myLessonEdit, setMyLessonEdit] = useState(null);
 
   // ─── NEW: “Toast” message state ────────────────────────────────────────────────
   // We’ll use this to show a styled success/error message instead of window.alert
@@ -115,6 +129,43 @@ export default function Dashboard() {
   const closeModal = () => {
     setShowModalFor(null);
   };
+
+  const handleEditClick = (lessonObj) => {
+    setShowModalMylessonFor(lessonObj);
+    setMyLessonEdit({...lessonObj, tags: lessonObj.tags.map((t) => categories.find(c => c.value === t))});
+  };
+
+  // Close the modal
+  const closeMylessonModal = () => {
+    setShowModalMylessonFor(null);
+    setMyLessonEdit(null);
+  };
+
+  // Save profile changes when “Save” is clicked
+  const handleLessonEdit = async () => {
+    if (!myLessonEdit || !uid) return;
+    const lessonDocRef = doc(db, 'lessons', myLessonEdit.id);
+    try {
+      await updateDoc(lessonDocRef, {
+        title: myLessonEdit.title,
+        category: myLessonEdit.category,
+        tags: myLessonEdit.tags.map((t) => t.value)
+      });
+
+      const snapshot = await fetchUserTeaching(uid);
+      const lessonIds = snapshot.docs.map(d => d.id);
+
+      const fetched = await fetchLessonsOnce();
+      const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
+      setTeachingLessons(allLessons.filter(l => lessonIds.includes(l.id)));
+      closeMylessonModal()
+    } catch (err) {
+      console.error('Failed to update lesson:', err);
+      showToast('Error updating Lesson: ' + err.message);
+    }
+  };
+
+  // console.log(teachingLessons);
 
   // ─── “Delete Enrollment” flow ────────────────────────────────────────────────
   const handleDeleteEnrollment = async (lessonObj) => {
@@ -386,8 +437,8 @@ export default function Dashboard() {
                       <br />
                       <small style={{ color: '#aaa' }}>{createdAt}</small>
                     </div>
-                    <Link to={`/lesson/${lesson.id}`}>
                       <button
+                        onClick={() => handleEditClick(lesson)}
                         style={{
                           backgroundColor: '#8e44ad',
                           color: '#fff',
@@ -400,7 +451,6 @@ export default function Dashboard() {
                       >
                         Edit
                       </button>
-                    </Link>
                   </li>
                 );
               })}
@@ -499,6 +549,140 @@ export default function Dashboard() {
               >
                 View in Lesson Feed
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showModalMylessonFor && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.6)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 2000,
+        }}>
+          <div style={{
+            background: '#1f1f1f',
+            borderRadius: 8,
+            width: '90%',
+            maxWidth: 380,
+            padding: '1.5rem',
+            // color: 'black',
+            color: "#fff",
+            position: 'relative',
+            boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
+          }}>
+            {/* Close “X” */}
+            <button
+              onClick={closeMylessonModal}
+              style={{
+                position: 'absolute',
+                top: 10,
+                right: 10,
+                background: 'transparent',
+                border: 'none',
+                color: '#aaa',
+                fontSize: '1.2rem',
+                cursor: 'pointer'
+              }}
+            >
+              &times;
+            </button>
+
+            <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>
+              {showModalMylessonFor.title}
+            </h3>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+              }}>
+                <p>Title</p>
+                <input
+                  type="text"
+                  value={myLessonEdit.title}
+                  onChange={e => setMyLessonEdit(prev => ({ ...prev, title: e.target.value }))}
+                  placeholder="Title"
+                  style={{
+                    padding: '0.4rem',
+                    marginBottom: '0.5rem',
+                    fontSize: '0.9rem',
+                    borderRadius: 4,
+                    border: '1px solid #ccc'
+                  }}
+                />
+              </div>
+
+              <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+              }}>
+                <p>Category</p>
+                <select
+                  type="text"
+                  value={myLessonEdit.category}
+                  onChange={e => setMyLessonEdit(prev => ({ ...prev, category: e.target.value }))}
+                  placeholder="Title"
+                  style={{
+                    padding: '0.4rem',
+                    marginBottom: '0.5rem',
+                    fontSize: '0.9rem',
+                    borderRadius: 4,
+                    border: '1px solid #ccc'
+                  }}
+                >
+                {
+                  categories.map((c, idx) => {
+                    return <option key={c.value} value={c.value}>{c.label}</option>
+                  })
+                }
+                </select>
+              </div>
+
+              <div style={{
+                display: "flex",
+                justifyContent: "space-between",
+                color: "black"
+              }}>
+                <p style={{color: "#fff"}}>Tags</p>
+                <Select
+                  isMulti
+                  options={categories}
+                  value={myLessonEdit.tags}
+                  onChange={(selected) => setMyLessonEdit(prev => ({...prev, tags: selected}))}
+                  style={{
+                    padding: '0.4rem',
+                    marginBottom: '0.5rem',
+                    fontSize: '0.9rem',
+                    borderRadius: 4,
+                    border: '1px solid #ccc',
+                    width: "50%"
+                  }}
+                >
+                <p>
+                  Selected: {myLessonEdit.tags.map(opt => opt.label).join(', ')}
+                </p>
+                </Select>
+              </div>
+            </div>
+            <div style={{
+              display: "flex",
+              justifyContent: "space-between",
+              color: "black"
+            }}>
+              <div></div>
+              <button 
+                onClick={handleLessonEdit}
+                style={{
+                  textAlign: "end"
+              }}>
+                Edit
+              </button>
+
             </div>
           </div>
         </div>
