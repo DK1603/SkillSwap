@@ -21,7 +21,8 @@ import {
   onSnapshot,
   serverTimestamp,
   query,
-  orderBy
+  orderBy,
+  where
 } from 'firebase/firestore';
 
 // ─── 1. Your Firebase config ─────────────────────────────────────────────────
@@ -195,8 +196,9 @@ export async function startChat(meUid, youUid) {
   return chatRef.id;
 }
 
-export function sendMessage(chatId, authorUid, text) {
+export async function sendMessage(chatId, authorUid, text) {
   const messagesCol = collection(db, 'chats', chatId, 'messages');
+  const messageRef = await getDocs(messagesCol);
   return addDoc(messagesCol, {
     authorUid,
     text,
@@ -210,4 +212,37 @@ export function watchMessages(chatId, cb) {
     orderBy('sentAt')
   );
   return onSnapshot(messagesQuery, cb);
+}
+
+export async function viewChats(meUid) {
+  const chatRef = collection(db, 'chats');
+  const q = query(
+    chatRef,
+    where("members", "array-contains", meUid)
+  )
+  const snapshot = await getDocs(q);
+  const arr = [];
+
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    data.messages = [];
+
+    arr.push({id: doc.id, ...data});
+  })
+
+  return arr;
+}
+
+export async function viewMessages(chatId) {
+  const msgRef = collection(db, 'chats', chatId, 'messages');
+  const q = query(
+    msgRef,
+    orderBy('sentAt')
+  )
+  const msgSnapshot = await getDocs(q);
+  const messages = [];
+  msgSnapshot.forEach((sn) => {
+    messages.push({id: sn.id, ...sn.data()});
+  });
+  return messages;
 }

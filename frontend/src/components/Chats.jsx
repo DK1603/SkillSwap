@@ -1,4 +1,7 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom'
+import { fetchUsers, sendMessage, startChat, viewChats, viewMessages } from '../services/firebase';
+import { useAuth } from '../contexts/AuthContext';
 
 const sampleConversations = [
   {
@@ -38,26 +41,89 @@ const sampleConversations = [
 ];
 
 export default function Chats() {
-  const [convos] = useState(sampleConversations);
-  const [activeId, setActiveId] = useState(convos[0].id);
+  const { user: authUser } = useAuth(); // Firebase Auth user
+  const uid = authUser?.uid;
+  const [convos, setConvos] = useState([]);
+  const [activeId, setActiveId] = useState("");
   const [input, setInput] = useState('');
+  const [searchParams] = useSearchParams();
   const bottomRef = useRef();
+  const [activeConvo, setActiveConvo] = useState();
+  // const activeConvo = convos.find(c => c.id === activeId);
 
-  const activeConvo = convos.find(c => c.id === activeId);
+  const load = useCallback(async () => {
+    const result = await viewChats(uid);
+
+    const member = searchParams.get("member");
+    const nonexists = result.find(r => r.members.includes(member)) === undefined;
+
+    // set name
+    const userSnapshots = await fetchUsers();
+    const users = [];
+    userSnapshots.forEach((sn) => {
+      users.push({ id: sn.id, ...sn.data() });
+    });
+    
+    result.forEach((res) => {
+      const members = res.members;
+      const other = members[0] === uid ? members[1] : members[0];
+      const user = users.find(u => u.id === other);
+      res.name = user.displayName;
+      res.avatar = user.photoURL === "" ? '/assets/profile-placeholder.png' : user.photoURL;
+      res.other = other;
+    });
+
+    for(const idx in result) {
+      const r = result[idx];
+      const messages = await viewMessages(r.id);
+      result.map((res) => {
+        if (res.id === r.id) {
+          res.messages = messages;
+        }
+      })
+    }
+
+    if (!nonexists) {
+      const messages = await viewMessages(result.find(r => r.members.includes(member)).id);
+      result.map((res) => {
+        if (res.members.includes(member)) {
+          res.messages = messages;
+        }
+      })
+      setActiveId(result.find(r => r.members.includes(member)).id)
+    }
+
+    setConvos(result);
+    if (nonexists && member) {
+      await startChat(uid, member).then((res) => {
+        setActiveId(res);
+      });
+    }
+  }, [searchParams, uid, setConvos, setActiveId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  useEffect(() => {
+    setActiveConvo(convos.find(c => c.id === activeId));
+  }, [convos, activeId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activeConvo.messages]);
+  }, [activeConvo?.messages]);
 
-  const handleSend = e => {
+  const handleSend = useCallback(async e => {
     e.preventDefault();
     if (!input.trim()) return;
-    activeConvo.messages.push({ author: 'You', text: input.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
+    // activeConvo.messages.push({ author: uid, text: input.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
     setInput('');
     // force update
     setInput(prev => prev);
-  };
-  
+    await sendMessage(activeConvo.id, uid, input.trim());
+    await load();
+  }, [activeConvo, input, uid]);
+
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Arial, sans-serif' }}>
       {/* Sidebar */}
@@ -97,21 +163,21 @@ export default function Chats() {
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#F2F2F2' }}>
         {/* Header */}
         <div style={{ padding: '1rem', background: '#fff', borderBottom: '1px solid #ddd', display: 'flex', alignItems: 'center' }}>
-          <img
-            src={activeConvo.avatar}
-            alt={activeConvo.name}
+          {activeId && <><img
+            src={activeConvo?.avatar || '/assets/profile-placeholder.png'}
+            alt={activeConvo?.name}
             style={{ width: 48, height: 48, borderRadius: '50%', marginRight: '1rem' }}
           />
           <div>
-            <div style={{ fontSize: 16, fontWeight: 'bold' }}>{activeConvo.name}</div>
+            <div style={{ fontSize: 16, fontWeight: 'bold' }}>{activeConvo?.name}</div>
             <div style={{ fontSize: 12, color: '#666' }}>Online</div>
-          </div>
+          </div></>}
         </div>
 
         {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
-          {activeConvo.messages.map((m, idx) => {
-            const isMe = m.author === 'You';
+          {activeConvo && activeConvo.messages.map((m, idx) => {
+            const isMe = m.authorUid === uid;
             return (
               <div
                 key={idx}
