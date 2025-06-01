@@ -1,12 +1,23 @@
 // src/components/CreateLesson.jsx
 
-import React, { useState } from 'react';
+import React, { useCallback, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Select from 'react-select';
 import { useAuth } from '../contexts/AuthContext';
 import {
   createLesson,
   addTeachingShortcut
 } from '../services/firebase';
+
+const categories = [
+  { value: 'programming', icon: '💻', label: '프로그래밍' },
+  { value: 'economics', icon: '💰', label: '경제' },
+  { value: 'math', icon: '➗', label: '수학' },
+  { value: 'science', icon: '🔬', label: '과학'},
+  { value: 'cooking', icon: '🍳', label: '요리' },
+  { value: 'design', icon: '🎨', label: '디자인' },
+  { value: 'self-development', icon: '🧭', label: '자기계발' },
+];
 
 export default function CreateLesson() {
   const navigate = useNavigate();
@@ -21,9 +32,15 @@ export default function CreateLesson() {
   const [startTime, setStartTime] = useState(''); // yyyy-MM-ddThh:mm
   const [sessionType, setSessionType] = useState('in-person');
   const [difficulty, setDifficulty] = useState('beginner');
+  const [tags, setTags] = useState([]);
+  const [category, setCategory] = useState("programming");
 
   // Minimal validation example
   const [error, setError] = useState('');
+
+  const handleTags = useCallback((selected) => {
+    setTags(selected);
+  }, [setTags]);
 
   const handleSave = async () => {
     setError('');
@@ -58,6 +75,8 @@ export default function CreateLesson() {
         cost: parseInt(cost),
         sessionType,
         difficulty,
+        tags: tags.map((t) => t.value),
+        category: category,
         startTime: new Date(startTime), // Firestore will store as timestamp
         createdAt: null // we'll rely on serverTimestamp() in the helper
       };
@@ -199,7 +218,7 @@ export default function CreateLesson() {
             />
           </div>
 
-          {/* Session Type & Difficulty */}
+          {/* Session Type & Difficulty && Tags */}
           <div
             style={{
               display: 'flex',
@@ -260,6 +279,34 @@ export default function CreateLesson() {
                 <option value="intermediate">Intermediate</option>
                 <option value="advanced">Advanced</option>
               </select>
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '0.3rem',
+                  color: '#333',
+                  fontSize: '0.9rem'
+                }}
+              >
+                Tags
+              </label>
+              {/* <p>Selected: {tags.join(', ')}</p> */}
+              <Select
+                isMulti
+                options={categories}
+                value={tags}
+                onChange={handleTags}
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  border: '1px solid #ccc',
+                  borderRadius: 4,
+                  fontSize: '1rem'
+                }}
+              >
+              </Select>
             </div>
           </div>
 
@@ -323,6 +370,36 @@ export default function CreateLesson() {
                   fontSize: '1rem'
                 }}
               />
+            </div>
+
+            <div style={{ flex: 1 }}>
+              <label
+                style={{
+                  display: 'block',
+                  marginBottom: '0.3rem',
+                  color: '#333',
+                  fontSize: '0.9rem'
+                }}
+              >
+                Category
+              </label>
+              <select
+                value={category}
+                onChange={e => setCategory(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '0.5rem',
+                  border: '1px solid #ccc',
+                  borderRadius: 4,
+                  fontSize: '1rem'
+                }}
+              >
+              {
+                categories.map((c, idx) => {
+                  return <option key={c.value} value={c.value}>{c.label}</option>
+                })
+              }
+              </select>
             </div>
           </div>
 

@@ -90,6 +90,7 @@ export function onLessonsSnapshot(cb) {
 }
 
 export function createLesson(data) {
+  console.log(data);
   return addDoc(lessonsCol, {
     ...data,
     createdAt: serverTimestamp()
