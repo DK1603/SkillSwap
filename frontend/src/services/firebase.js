@@ -17,6 +17,7 @@ import {
   setDoc,
   deleteDoc,
   getDocs,
+  getDoc,
   onSnapshot,
   serverTimestamp,
   query,
@@ -104,6 +105,35 @@ export function watchLessons(cb) {
   return onSnapshot(q, cb);
 }
 
+// Get User Name by teacher UID
+export async function getUserDisplayName(uid) {
+  const userRef = doc(db, 'users', uid);
+  const snapshot = await getDoc(userRef);
+  if (snapshot.exists()) {
+    return snapshot.data().displayName || '알 수 없음';
+  }
+  return '알 수 없음';
+}
+
+// Get average rating for a lesson
+export async function calculateAverageRating(lessonId) {
+  const reviewsRef = collection(db, 'lessons', lessonId, 'reviews');
+  const snapshot = await getDocs(reviewsRef);
+
+  let total = 0;
+  let count = 0;
+
+  snapshot.forEach((doc) => {
+    const data = doc.data();
+    if (typeof data.rating === 'number') {
+      total += data.rating;
+      count += 1;
+    }
+  });
+
+  return count > 0 ? total / count : 0;
+}
+
 // ─── 5. Firestore: “users” Collection ────────────────────────────────────────────
 const usersCol = collection(db, 'users');
 
@@ -127,6 +157,7 @@ export function cancelEnrollment(lessonId, uid) {
   const enrollmentDocRef = doc(db, 'lessons', lessonId, 'enrollments', uid);
   return deleteDoc(enrollmentDocRef);
 }
+
 
 // ─── 7. Firestore: Profile Shortcuts ─────────────────────────────────────────────
 export function watchTeaching(uid, cb) {

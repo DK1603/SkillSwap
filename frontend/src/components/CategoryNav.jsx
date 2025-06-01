@@ -4,8 +4,10 @@ import React from 'react';
 const categories = [
   { key: 'all', icon: '🗂️', label: '전체' },
   { key: 'programming', icon: '💻', label: '프로그래밍' },
-  { key: 'game', icon: '🎮', label: '게임 개발' },
+  // { key: 'game', icon: '🎮', label: '게임 개발' },
   { key: 'economics', icon: '💰', label: '경제' },
+  { key: 'math', icon: '➗', label: '수학' },
+  { key: 'science', icon: '🔬', label: '과학'},
   { key: 'cooking', icon: '🍳', label: '요리' },
   { key: 'design', icon: '🎨', label: '디자인' },
   { key: 'self-development', icon: '🧭', label: '자기계발' },

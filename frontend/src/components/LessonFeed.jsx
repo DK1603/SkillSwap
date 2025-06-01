@@ -3,50 +3,61 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import CategoryNav from '../components/CategoryNav';
-import { watchLessons } from '../services/firebase';
+import { watchLessons, getUserDisplayName, calculateAverageRating } from '../services/firebase';
 import { Timestamp } from 'firebase/firestore';
 
 export default function LessonFeed() {
   const navigate = useNavigate();
-  const [lessons, setLessons] = useState([]);
+  // const [lessonsW, setLessons] = useState([]);
   const [sortMode, setSortMode] = useState('startTime'); 
-  const [selectedTag, setSelectedTag] = useState('전체');
+  const [selectedTag, setSelectedTag] = useState('all');
+  const [lessonsWithTeachers, setLessonsWithTeachers] = useState([]);
   // You can sort by 'startTime' or by 'cost' or any other numeric field.
 
   useEffect(() => {
     // Subscribe in real‐time to the /lessons collection, ordered by createdAt (descending)
-    const unsubscribe = watchLessons((snapshot) => {
+    const unsubscribe = watchLessons(async (snapshot) => {
       const arr = [];
-      snapshot.forEach((docSnap) => {
-        arr.push({ id: docSnap.id, ...docSnap.data() });
-      });
-      setLessons(arr);
+      for (const docSnap of snapshot.docs) {
+        const lesson = docSnap.data();
+        const teacherName = await getUserDisplayName(lesson.teacherUid);
+        const rating = await calculateAverageRating(docSnap.id);
+        arr.push({ id: docSnap.id, ...lesson, teacherName, rating });
+      }
+      setLessonsWithTeachers(arr);
     });
 
     // Cleanup on unmount
     return () => unsubscribe();
   }, []);
 
-  const filteredLessons = selectedTag && selectedTag !== '전체'
-    ? lessons.filter(l => l.tag?.includes(selectedTag))
-    : lessons;
+  const filteredLessons = selectedTag && selectedTag !== 'all'
+    ? lessonsWithTeachers.filter(l => l.category === selectedTag)
+    : lessonsWithTeachers;
 
   // Sort logic: by startTime (soonest first) or by cost (lowest first)
   const sortedLessons = [...filteredLessons].sort((a, b) => {
-    if (sortMode === 'startTime') {
-      // Both a.startTime and b.startTime are Firestore Timestamp objects
-      const ta = a.startTime instanceof Timestamp 
-        ? a.startTime.seconds 
-        : 0;
-      const tb = b.startTime instanceof Timestamp 
-        ? b.startTime.seconds 
-        : 0;
-      return ta - tb; // ascending: earliest start first
+    const ta = a.startTime instanceof Timestamp ? a.startTime.seconds : 0;
+    const tb = b.startTime instanceof Timestamp ? b.startTime.seconds : 0;
+    const ca = a.cost ?? 0;
+    const cb = b.cost ?? 0;
+    const ra = a.rating ?? 0;
+    const rb = b.rating ?? 0;
+    const ea = a.enrolledCount ?? 0;
+    const eb = b.enrolledCount ?? 0;
+
+    switch (sortMode) {
+      case 'ratingHigh':
+        return rb - ra; // 평점 높은 순
+      // case 'enrollmentHigh':
+      //   return eb - ea; // 등록자 많은 순
+      case 'costLow':
+        return ca - cb; // 가격 낮은 순
+      case 'startSoon':
+        return ta - tb; // 시작 시간 빠른 순
+      default:
+        return 0;
     }
-    if (sortMode === 'cost') {
-      return (a.cost ?? 0) - (b.cost ?? 0); // ascending: cheapest first
-    }
-    return 0;
   });
 
   return (
@@ -85,8 +96,10 @@ export default function LessonFeed() {
                 border: '1px solid #ccc'
               }}
             >
-              <option value="startTime">Sort by Start Time</option>
-              <option value="cost">Sort by Cost</option>
+              <option value="ratingHigh">Rating</option>
+              {/* <option value="enrollmentHigh">Enrolled</option> */}
+              <option value="costLow">Cost</option>
+              <option value="startSoon">Start Time</option>
             </select>
           </div>
         </div>
@@ -142,7 +155,7 @@ export default function LessonFeed() {
                     {lesson.title}
                   </div>
                   <div style={{ marginBottom: '0.25rem', color: '#555555' }}>
-                    {lesson.teacherUid}
+                    {lesson.teacherName}
                   </div>
                   {formattedDate && (
                     <div style={{ marginBottom: '0.25rem', color: '#777777', fontSize: '0.85rem' }}>
@@ -157,6 +170,9 @@ export default function LessonFeed() {
                   <div style={{ fontSize: '0.85rem', color: '#888888' }}>
                     Difficulty: {lesson.difficulty}
                   </div>
+                    <div style={{ fontSize: '0.85rem', color: '#ffaa00' }}>
+                      ⭐ {lesson.rating} / 5
+                    </div>
                 </div>
               </div>
             );
