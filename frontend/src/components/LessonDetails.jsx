@@ -10,6 +10,9 @@ import {
   Timestamp,
   updateDoc    // <-- IMPORT updateDoc here
 } from 'firebase/firestore';
+
+import { getUserDisplayName } from '../services/firebase';
+
 import {
   db,
   enroll,
@@ -29,6 +32,7 @@ export default function LessonDetails() {
   const [showConfirm, setShowConfirm] = useState(false);
   const [userPoints, setUserPoints] = useState(0);
   const [registeredCount, setRegisteredCount] = useState(0);
+  const [reviews, setReviews] = useState([]);
 
   // 1) Fetch single lesson document from Firestore
   useEffect(() => {
@@ -87,6 +91,26 @@ export default function LessonDetails() {
     };
     fetchEnrollmentCount();
   }, [id, uid]);
+
+
+  useEffect(() => {
+    const fetchReviews = async () => {
+      try {
+        const snapshot = await getDocs(collection(db, 'lessons', id, 'reviews'));
+        const temp = await Promise.all(snapshot.docs.map(async (docSnap) => {
+          const data = docSnap.data();
+          const userName = await getUserDisplayName(data.uid);
+          return { ...data, userName };
+        }));
+        setReviews(temp);
+      } catch (err) {
+        console.error('Error fetching reviews:', err);
+      }
+    };
+
+    fetchReviews();
+  }, [id]);
+
 
   if (loading) {
     return <div style={{ padding: '2rem' }}>Loading…</div>;
@@ -324,8 +348,20 @@ export default function LessonDetails() {
          * ─── Right Reviews / Comments (placeholder) ─────────────────────────────────
          */}
         <div style={{ flex: 1 }}>
-          <p style={{ color: '#777777', fontStyle: 'italic' }}>No reviews available.</p>
+          <h3>📝 Reviews</h3>
+          {reviews.length === 0 ? (
+            <p style={{ color: '#777777', fontStyle: 'italic' }}>No reviews yet.</p>
+          ) : (
+            reviews.map((r, i) => (
+              <div key={i} style={{ marginBottom: '1rem', padding: '0.5rem', background: '#f5f5f5', borderRadius: 6 }}>
+                <div style={{ fontWeight: 'bold' }}>{r.userName}</div>
+                <div>⭐ {r.rating} / 5</div>
+                <p style={{ marginTop: '0.25rem' }}>{r.description}</p>
+              </div>
+            ))
+          )}
         </div>
+
       </div>
 
       {/**
