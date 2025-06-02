@@ -160,6 +160,21 @@ export function cancelEnrollment(lessonId, uid) {
   return deleteDoc(enrollmentDocRef);
 }
 
+// ─── 6.5 Firestore: Review for Lesson ────────────────────────────────────────────
+export async function deleteReview(lessonId, reviewId) {
+  const reviewDocRef = doc(db, 'lessons', lessonId, 'reviews', reviewId)
+  return await deleteDoc(reviewDocRef);
+}
+
+export async function submitReview(lessonId, uid, data) {
+  const reviewColRef = collection(db, 'lessons', lessonId, 'reviews');
+  console.log(data);
+  return await addDoc(reviewColRef, {
+    ...data,
+    uid: uid,
+    createdAt: serverTimestamp()
+  })
+}
 
 // ─── 7. Firestore: Profile Shortcuts ─────────────────────────────────────────────
 export function watchTeaching(uid, cb) {
