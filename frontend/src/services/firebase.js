@@ -22,7 +22,8 @@ import {
   serverTimestamp,
   query,
   orderBy,
-  where
+  where,
+  updateDoc
 } from 'firebase/firestore';
 
 // ─── 1. Your Firebase config ─────────────────────────────────────────────────
@@ -176,6 +177,26 @@ export async function submitReview(lessonId, uid, data) {
   })
 }
 
+export async function fetchReviews(lessonId) {
+  const reviewColRef = collection(db, "lessons", lessonId, "reviews");
+  const snapshot = await getDocs(reviewColRef);
+  return snapshot.docs.map((doc) => {
+    return {id: doc.id, ...doc.data()};
+  });
+}
+
+// ─── 6.6 Firestore: Close Lesson ─────────────────────────────────────────────────
+export async function closeLesson(lessonObj, uid, afterBalance) {
+  const lessonDocRef = doc(db, "lessons", lessonObj.id);
+  const userDocRef = doc(db, "users", uid);
+  await updateDoc(lessonDocRef, {
+    open: false
+  });
+  await updateDoc(userDocRef, {
+    pointBalance: afterBalance
+  });
+}
+
 // ─── 7. Firestore: Profile Shortcuts ─────────────────────────────────────────────
 export function watchTeaching(uid, cb) {
   const teachingCol = collection(db, 'users', uid, 'teaching');
@@ -185,6 +206,14 @@ export function watchTeaching(uid, cb) {
 export function watchEnrolled(uid, cb) {
   const enrolledCol = collection(db, 'users', uid, 'enrolled');
   return onSnapshot(enrolledCol, cb);
+}
+
+export async function getEnrollments(lessonId) {
+  const enrolledCol = collection(db, "lessons", lessonId, "enrollments");
+  const snapshot = await getDocs(enrolledCol);
+  return snapshot.docs.map((doc) => {
+    return {id: doc.id, ...doc.data()};
+  });
 }
 
 export function addTeachingShortcut(uid, lessonId) {

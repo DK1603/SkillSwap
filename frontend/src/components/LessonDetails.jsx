@@ -248,6 +248,19 @@ export default function LessonDetails() {
         >
           <h1 style={{ margin: 0, textAlign: 'left' }}>{title}</h1>
           <p style={{ margin: 0, textAlign: 'left', minHeight: '2.5rem' }}>{description}</p>
+          {(lesson?.open === null || !lesson?.open) && <span
+            style={{
+              background: 'red',
+              color: '#ffffff',
+              padding: '0.2rem 1rem',
+              borderRadius: '1rem',
+              fontSize: '0.8rem',
+              textAlign: "start",
+              width: "fit-content"
+            }}
+          >
+            closed
+          </span>}
           {formattedStart && (
             <p style={{ margin: 0, textAlign: 'left' }}>🗓️ Start Date: {formattedStart}</p>
           )}
@@ -390,7 +403,21 @@ export default function LessonDetails() {
         <div style={{ flex: 1, borderRadius: 8, border: '1px solid #dddddd', padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", overflow: "auto" }}>
           <div style={{display: "flex", alignItems: "center", justifyContent: "space-between"}}>
             <h3>📝 Reviews</h3>
-            {enrolled && <button onClick={addHandler}>{edit ? "Close" : "Add"}</button>}
+            {enrolled && 
+              <button 
+                disabled={lesson?.open === null || !lesson?.open}
+                style={{
+                  background: (lesson?.open === null || !lesson?.open) ? "grey" : "",
+                  color: (lesson?.open === null || !lesson?.open) ? "white" : "",
+                  borderRadius: 8, 
+                  border: '1px solid #cccccc',
+                  cursor: (lesson?.open === null || !lesson?.open) ? "default" : "pointer"
+                }} 
+                onClick={addHandler}
+              >
+                {edit ? "Close" : "Add"}
+              </button>
+            }
           </div>
           {edit && <div style={{ flex: 1, borderRadius: 8, border: '1px solid #dddddd', padding: "1rem"}}>
             <div style={{
