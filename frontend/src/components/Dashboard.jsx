@@ -15,7 +15,7 @@ import {
   fetchUserReview,
   fetchEnrolledHistory
 } from '../services/firebase';
-import { getDoc, doc, updateDoc, collection } from 'firebase/firestore';
+import { getDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { Link, useNavigate } from 'react-router-dom';
 import Select from 'react-select';
@@ -43,8 +43,8 @@ export default function Dashboard() {
   });
   const [editing, setEditing] = useState(false);
 
-  const [teachingLessons, setTeachingLessons] = useState([]);   // { id, …lessonData }
-  const [enrolledLessons, setEnrolledLessons] = useState([]);   // { id, …lessonData }
+  const [teachingLessons, setTeachingLessons] = useState([]);
+  const [enrolledLessons, setEnrolledLessons] = useState([]);
 
   // Modal state
   const [showModalFor, setShowModalFor] = useState(null);
@@ -67,13 +67,10 @@ export default function Dashboard() {
     getDoc(userDocRef).then((snap) => {
       if (snap.exists()) {
         setProfileData(snap.data());
-      } else {
-        console.warn('No user doc exists at /users/' + uid);
       }
     });
   }, [uid]);
 
-  // Save profile changes when “Save” is clicked
   const handleProfileSave = async () => {
     if (!uid) return;
     const userDocRef = doc(db, 'users', uid);
@@ -135,11 +132,9 @@ export default function Dashboard() {
   };
 
   // ─── 4) Modal‐related handlers ───────────────────────────────────────────────
-
   const handleViewClick = (lessonObj) => {
     setShowModalFor(lessonObj);
   };
-
   const closeModal = () => {
     setShowModalFor(null);
   };
@@ -148,10 +143,11 @@ export default function Dashboard() {
     setShowModalMylessonFor(lessonObj);
     setMyLessonEdit({
       ...lessonObj,
+      description: lessonObj.description || '',
+      thumbnailURL: lessonObj.thumbnailURL || '',
       tags: lessonObj.tags.map(t => categories.find(c => c.value === t))
     });
   };
-
   const closeLessonEditModal = () => {
     setShowModalMylessonFor(null);
     setMyLessonEdit(null);
@@ -200,6 +196,8 @@ export default function Dashboard() {
     try {
       await updateDoc(lessonDocRef, {
         title: myLessonEdit.title,
+        description: myLessonEdit.description,
+        thumbnailURL: myLessonEdit.thumbnailURL,
         category: myLessonEdit.category,
         tags: myLessonEdit.tags.map(t => t.value)
       });
@@ -265,9 +263,7 @@ export default function Dashboard() {
         // 1) Taught lessons IDs
         const teachingSnap = await fetchUserTeaching(uid);
         const taughtIds = teachingSnap.docs.map(d => d.id);
-        
 
-        // !!!!!!!!
         // 2) Attended lessons IDs
         const attendedLessons = await fetchEnrolledHistory(uid);
         const attendedIds = attendedLessons.map(l => l.id);
@@ -526,7 +522,6 @@ export default function Dashboard() {
                   ? new Date(lesson.createdAt.seconds * 1000).toLocaleString()
                   : 'TBD';
                 if (lesson.open === false) {
-                  // Hide closed lessons from main “Teaching” list
                   return null;
                 }
                 return (
@@ -716,22 +711,42 @@ export default function Dashboard() {
               {showModalMylessonFor.title}
             </h3>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                <p>Title</p>
-                <input
-                  type="text"
-                  value={myLessonEdit.title}
-                  onChange={e => setMyLessonEdit(prev => ({ ...prev, title: e.target.value }))}
-                  placeholder="Title"
+              {/* Description */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <label style={{ color: '#fff', fontSize: '0.9rem' }}>Description</label>
+                <textarea
+                  value={myLessonEdit.description}
+                  onChange={e => setMyLessonEdit(prev => ({ ...prev, description: e.target.value }))}
+                  placeholder="Enter description…"
                   style={{
                     padding: '0.4rem',
-                    marginBottom: '0.5rem',
+                    fontSize: '0.9rem',
+                    borderRadius: 4,
+                    border: '1px solid #ccc',
+                    resize: 'vertical',
+                    minHeight: 60
+                  }}
+                />
+              </div>
+
+              {/* Thumbnail URL */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
+                <label style={{ color: '#fff', fontSize: '0.9rem' }}>Thumbnail URL</label>
+                <input
+                  type="text"
+                  value={myLessonEdit.thumbnailURL}
+                  onChange={e => setMyLessonEdit(prev => ({ ...prev, thumbnailURL: e.target.value }))}
+                  placeholder="Paste thumbnail URL"
+                  style={{
+                    padding: '0.4rem',
                     fontSize: '0.9rem',
                     borderRadius: 4,
                     border: '1px solid #ccc'
                   }}
                 />
               </div>
+
+              {/* Category */}
               <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <p>Category</p>
                 <select
@@ -739,7 +754,6 @@ export default function Dashboard() {
                   onChange={e => setMyLessonEdit(prev => ({ ...prev, category: e.target.value }))}
                   style={{
                     padding: '0.4rem',
-                    marginBottom: '0.5rem',
                     fontSize: '0.9rem',
                     borderRadius: 4,
                     border: '1px solid #ccc'
@@ -750,6 +764,8 @@ export default function Dashboard() {
                   ))}
                 </select>
               </div>
+
+              {/* Tags */}
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <p style={{ color: '#fff' }}>Tags</p>
                 <Select
@@ -763,6 +779,7 @@ export default function Dashboard() {
                 />
               </div>
             </div>
+
             <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
               <button
                 onClick={handleLessonEdit}
