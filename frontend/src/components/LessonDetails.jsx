@@ -114,7 +114,7 @@ export default function LessonDetails() {
     fetchReviews();
   }, [id]);
 
-  const handleDeleteReview = useCallback( async (reviewId) => {
+  const handleDeleteReview = useCallback(async (reviewId) => {
     try {
       await deleteReview(id, reviewId);
 
@@ -125,7 +125,7 @@ export default function LessonDetails() {
         return { id: docSnap.id, ...data, userName };
       }));
       setReviews(temp);
-    } catch(err) {
+    } catch (err) {
       console.error('Error deleting review:', err)
     }
   }, [id, setReviews]);
@@ -135,7 +135,7 @@ export default function LessonDetails() {
     setAddReview({ description: "", rating: 5 })
   }, [setEdit, setAddReview])
 
-  const handleReviewSubmit = useCallback( async () => {
+  const handleReviewSubmit = useCallback(async () => {
     try {
       await submitReview(id, uid, addReview);
       setEdit(false);
@@ -148,7 +148,7 @@ export default function LessonDetails() {
         return { id: docSnap.id, ...data, userName };
       }));
       setReviews(temp);
-    } catch(err) {
+    } catch (err) {
       console.log('Error submitting review:', err)
     }
   }, [id, uid, addReview, setEdit, setAddReview, setReviews])
@@ -284,19 +284,24 @@ export default function LessonDetails() {
           </div>
         </div>
         <div style={{ flex: 1 }}>
-          <div
-            style={{
-              width: '100%',
-              height: 200,
-              background: '#cccccc',
-              borderRadius: 8,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}
-          >
-            Thumbnail
-          </div>
+          {(lesson?.thumbnailURL ?? "").trim() === "" ?
+            <div
+              style={{
+                width: '100%',
+                height: 200,
+                background: '#cccccc',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              Thumbnail
+            </div> : <img
+              src={lesson.thumbnailURL || '/assets/profile-placeholder.png'}
+              alt="thumbnail"
+              style={{ width: "100%", height: 200, borderRadius: 8, objectFit: 'cover', marginBottom: '0.5rem' }}
+            />}
         </div>
       </div>
 
@@ -420,30 +425,30 @@ export default function LessonDetails() {
                 style={{
                   background: (lesson?.open === null || !lesson?.open) ? "grey" : "",
                   color: (lesson?.open === null || !lesson?.open) ? "white" : "",
-                  borderRadius: 8, 
+                  borderRadius: 8,
                   border: '1px solid #cccccc',
                   cursor: (lesson?.open === null || !lesson?.open) ? "default" : "pointer"
-                }} 
+                }}
                 onClick={addHandler}
               >
                 {edit ? "Close" : "Add"}
               </button>
             }
           </div>
-          {edit && <div style={{ flex: 1, borderRadius: 8, border: '1px solid #dddddd', padding: "1rem"}}>
+          {edit && <div style={{ flex: 1, borderRadius: 8, border: '1px solid #dddddd', padding: "1rem" }}>
             <div style={{
               display: "flex",
               flexDirection: "column",
               justifyContent: "flex-start",
               gap: "0.5rem"
             }}>
-              <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
-                <div style={{textAlign: "start"}}>Description</div>
-                <div style={{display: "flex", alignItems: "center"}}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div style={{ textAlign: "start" }}>Description</div>
+                <div style={{ display: "flex", alignItems: "center" }}>
                   <div>⭐</div>
                   <select
                     defaultValue={addReview.rating}
-                    onChange={e => setAddReview(p => ({...p, rating: parseInt(e.target.value) }))}
+                    onChange={e => setAddReview(p => ({ ...p, rating: parseInt(e.target.value) }))}
                     style={{
                       padding: '0.4rem',
                       fontSize: '0.9rem',
@@ -464,7 +469,7 @@ export default function LessonDetails() {
                 placeholder="Description"
                 maxLength={1000}
                 defaultValue={addReview.description}
-                onChange={e => setAddReview(p => ({...p, description: e.target.value}))}
+                onChange={e => setAddReview(p => ({ ...p, description: e.target.value }))}
                 style={{
                   padding: '0.4rem',
                   fontSize: '0.9rem',
@@ -473,8 +478,8 @@ export default function LessonDetails() {
                   resize: "none",
                 }}
               />
-              <div style={{ display: "flex", justifyContent: "flex-end"}}>
-                <button onClick={handleReviewSubmit} style={{background: "#00A760", color: "white"}}>Submit</button>
+              <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                <button onClick={handleReviewSubmit} style={{ background: "#00A760", color: "white" }}>Submit</button>
               </div>
             </div>
           </div>}
@@ -486,9 +491,9 @@ export default function LessonDetails() {
                 <div style={{ fontWeight: 'bold' }}>{r.userName}</div>
                 <div>⭐ {r.rating} / 5</div>
                 <p style={{ marginTop: '0.25rem' }}>{r.description}</p>
-                {(r.uid === uid) && 
-                  <div style={{ display: "flex", justifyContent: "flex-end"}}>
-                    <button onClick={() => handleDeleteReview(r.id)} style={{background: "red", color: "white"}}>delete</button>
+                {(r.uid === uid) &&
+                  <div style={{ display: "flex", justifyContent: "flex-end" }}>
+                    <button onClick={() => handleDeleteReview(r.id)} style={{ background: "red", color: "white" }}>delete</button>
                   </div>
                 }
               </div>

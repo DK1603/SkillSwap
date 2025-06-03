@@ -35,6 +35,7 @@ export default function CreateLesson() {
   const [difficulty, setDifficulty] = useState('beginner');
   const [tags, setTags] = useState([]);
   const [category, setCategory] = useState("programming");
+  const [thumbnail, setThumbnail] = useState("");
 
   // Minimal validation example
   const [error, setError] = useState('');
@@ -79,6 +80,7 @@ export default function CreateLesson() {
         tags: tags.map((t) => t.value),
         category: category,
         open: true,
+        thumbnailURL: thumbnail,
         startTime: new Date(startTime), // Firestore will store as timestamp
         createdAt: null // we'll rely on serverTimestamp() in the helper
       };
@@ -166,7 +168,14 @@ export default function CreateLesson() {
           )}
 
           {/* Lesson Title */}
-          <div style={{ marginBottom: '1rem' }}>
+          <div 
+            style={{ 
+              marginBottom: '1rem',
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.5rem"
+            }}
+          >
             <label
               style={{
                 display: 'block',
@@ -183,7 +192,57 @@ export default function CreateLesson() {
               onChange={e => setTitle(e.target.value)}
               placeholder="Enter lesson title"
               style={{
+                padding: '0.6rem',
+                border: '1px solid #ccc',
+                borderRadius: 4,
+                fontSize: '1rem'
+              }}
+            />
+          </div>
+
+          {/* Lesson Thumbnail */}
+          <div 
+            style={{ 
+              marginBottom: '1rem',
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.5rem"
+            }}
+          >
+            <div
+              style={{
+                display: 'block',
+                marginBottom: '0.3rem',
+                color: '#333',
+                fontSize: '0.9rem'
+              }}
+            >
+              Thumbnail
+            </div>
+            {thumbnail.trim() === "" ? 
+            <div
+              style={{
                 width: '100%',
+                height: 200,
+                background: '#cccccc',
+                borderRadius: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              Thumbnail
+            </div> :<img
+              src={thumbnail || '/assets/profile-placeholder.png'}
+              alt="thumbnail"
+              style={{ width: "100%", height: 200, borderRadius: 8, objectFit: 'cover', marginBottom: '0.5rem' }}
+            />}
+            <input
+              type="text"
+              defaultValue={thumbnail}
+              onChange={e => setThumbnail(e.target.value)}
+              placeholder="Enter lesson thumbnail URL"
+              style={{
                 padding: '0.6rem',
                 border: '1px solid #ccc',
                 borderRadius: 4,
@@ -193,7 +252,14 @@ export default function CreateLesson() {
           </div>
 
           {/* Description */}
-          <div style={{ marginBottom: '1rem' }}>
+          <div 
+            style={{ 
+              marginBottom: '1rem',
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.5rem"
+            }}
+          >
             <label
               style={{
                 display: 'block',
@@ -209,7 +275,6 @@ export default function CreateLesson() {
               onChange={e => setDescription(e.target.value)}
               placeholder="Brief description…"
               style={{
-                width: '100%',
                 padding: '0.6rem',
                 border: '1px solid #ccc',
                 borderRadius: 4,
@@ -406,7 +471,14 @@ export default function CreateLesson() {
           </div>
 
           {/* Start Time */}
-          <div style={{ marginBottom: '1rem' }}>
+          <div 
+            style={{ 
+              marginBottom: '1rem',
+              display: "flex",
+              flexDirection: "column",
+              gap: "0.5rem"
+            }}
+          >
             <label
               style={{
                 display: 'block',
@@ -422,7 +494,6 @@ export default function CreateLesson() {
               value={startTime}
               onChange={e => setStartTime(e.target.value)}
               style={{
-                width: '100%',
                 padding: '0.5rem',
                 border: '1px solid #ccc',
                 borderRadius: 4,
