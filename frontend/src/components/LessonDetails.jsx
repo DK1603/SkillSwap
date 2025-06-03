@@ -346,7 +346,22 @@ export default function LessonDetails() {
           </table>
 
           {/* Enroll or Enrolled Button */}
-          {!enrolled ? (
+          {!lesson.open ? (
+            <button
+              disabled
+              style={{
+                width: '100%',
+                background: '#cccccc',
+                color: '#666666',
+                padding: '0.75rem',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: '1rem'
+              }}
+            >
+              Closed
+            </button>
+          ) : (!enrolled ? (
             <button
               onClick={() => setShowConfirm(true)}
               style={{
@@ -377,7 +392,7 @@ export default function LessonDetails() {
             >
               Enrolled
             </button>
-          )}
+          ))}
         </div>
 
         {/**
@@ -423,8 +438,8 @@ export default function LessonDetails() {
               <button 
                 disabled={lesson?.open === null || !lesson?.open}
                 style={{
-                  background: (lesson?.open === null || !lesson?.open) ? "grey" : "",
-                  color: (lesson?.open === null || !lesson?.open) ? "white" : "",
+                  background: (lesson?.open === null || !lesson?.open) ? "grey" : "#ffffff",
+                  color: (lesson?.open === null || !lesson?.open) ? "white" : "black",
                   borderRadius: 8,
                   border: '1px solid #cccccc',
                   cursor: (lesson?.open === null || !lesson?.open) ? "default" : "pointer"
@@ -556,6 +571,8 @@ export default function LessonDetails() {
               onClick={() => setShowConfirm(false)}
               style={{
                 marginLeft: '1rem',
+                background: "#f9f9f9",
+                color: 'black',
                 padding: '0.5rem 1rem',
                 fontSize: '1rem',
                 cursor: 'pointer'
