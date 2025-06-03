@@ -180,9 +180,11 @@ export async function submitReview(lessonId, uid, data) {
 export async function fetchReviews(lessonId) {
   const reviewColRef = collection(db, "lessons", lessonId, "reviews");
   const snapshot = await getDocs(reviewColRef);
-  return snapshot.docs.map((doc) => {
-    return {id: doc.id, ...doc.data()};
+  const arr = [];
+  snapshot.docs.forEach((doc) => {
+    arr.push({id: doc.id, ...doc.data()});
   });
+  return arr;
 }
 
 // ─── 6.6 Firestore: Close Lesson ─────────────────────────────────────────────────

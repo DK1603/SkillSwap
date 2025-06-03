@@ -432,7 +432,7 @@ export default function LessonDetails() {
                   <div>⭐</div>
                   <select
                     defaultValue={addReview.rating}
-                    onChange={e => setAddReview(p => ({...p, rating: e.target.value }))}
+                    onChange={e => setAddReview(p => ({...p, rating: parseInt(e.target.value) }))}
                     style={{
                       padding: '0.4rem',
                       fontSize: '0.9rem',
