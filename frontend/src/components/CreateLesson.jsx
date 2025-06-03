@@ -364,13 +364,22 @@ export default function CreateLesson() {
                 isMulti
                 options={categories}
                 value={tags}
+                styles={{
+                  menu: (baseStyles, state) => ({
+                    ...baseStyles,
+                    color: "black"
+                  })
+                }}
                 onChange={handleTags}
                 style={{
                   width: '100%',
                   padding: '0.5rem',
                   border: '1px solid #ccc',
                   borderRadius: 4,
-                  fontSize: '1rem'
+                  fontSize: '1rem',
+                  option: {
+                    color: "black"
+                  }
                 }}
               >
               </Select>
