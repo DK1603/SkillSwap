@@ -1,6 +1,6 @@
 // src/components/LessonDetails.jsx
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   doc,
@@ -11,7 +11,7 @@ import {
   updateDoc    // <-- IMPORT updateDoc here
 } from 'firebase/firestore';
 
-import { getUserDisplayName } from '../services/firebase';
+import { deleteReview, getUserDisplayName, submitReview } from '../services/firebase';
 
 import {
   db,
@@ -33,6 +33,8 @@ export default function LessonDetails() {
   const [userPoints, setUserPoints] = useState(0);
   const [registeredCount, setRegisteredCount] = useState(0);
   const [reviews, setReviews] = useState([]);
+  const [edit, setEdit] = useState(false);
+  const [addReview, setAddReview] = useState({ description: "", rating: 5 });
 
   // 1) Fetch single lesson document from Firestore
   useEffect(() => {
@@ -100,7 +102,7 @@ export default function LessonDetails() {
         const temp = await Promise.all(snapshot.docs.map(async (docSnap) => {
           const data = docSnap.data();
           const userName = await getUserDisplayName(data.uid);
-          return { ...data, userName };
+          return { id: docSnap.id, ...data, userName };
         }));
         setReviews(temp);
       } catch (err) {
@@ -111,6 +113,44 @@ export default function LessonDetails() {
     fetchReviews();
   }, [id]);
 
+  const handleDeleteReview = useCallback( async (reviewId) => {
+    try {
+      await deleteReview(id, reviewId);
+
+      const snapshot = await getDocs(collection(db, 'lessons', id, 'reviews'));
+      const temp = await Promise.all(snapshot.docs.map(async (docSnap) => {
+        const data = docSnap.data();
+        const userName = await getUserDisplayName(data.uid);
+        return { id: docSnap.id, ...data, userName };
+      }));
+      setReviews(temp);
+    } catch(err) {
+      console.error('Error deleting review:', err)
+    }
+  }, [id, setReviews]);
+
+  const addHandler = useCallback(() => {
+    setEdit(p => !p);
+    setAddReview({ description: "", rating: 5 })
+  }, [setEdit, setAddReview])
+
+  const handleReviewSubmit = useCallback( async () => {
+    try {
+      await submitReview(id, uid, addReview);
+      setEdit(false);
+      setAddReview({ description: "", rating: 5 })
+
+      const snapshot = await getDocs(collection(db, 'lessons', id, 'reviews'));
+      const temp = await Promise.all(snapshot.docs.map(async (docSnap) => {
+        const data = docSnap.data();
+        const userName = await getUserDisplayName(data.uid);
+        return { id: docSnap.id, ...data, userName };
+      }));
+      setReviews(temp);
+    } catch(err) {
+      console.log('Error submitting review:', err)
+    }
+  }, [id, uid, addReview, setEdit, setAddReview, setReviews])
 
   if (loading) {
     return <div style={{ padding: '2rem' }}>Loading…</div>;
@@ -208,6 +248,19 @@ export default function LessonDetails() {
         >
           <h1 style={{ margin: 0, textAlign: 'left' }}>{title}</h1>
           <p style={{ margin: 0, textAlign: 'left', minHeight: '2.5rem' }}>{description}</p>
+          {(lesson?.open === null || !lesson?.open) && <span
+            style={{
+              background: 'red',
+              color: '#ffffff',
+              padding: '0.2rem 1rem',
+              borderRadius: '1rem',
+              fontSize: '0.8rem',
+              textAlign: "start",
+              width: "fit-content"
+            }}
+          >
+            closed
+          </span>}
           {formattedStart && (
             <p style={{ margin: 0, textAlign: 'left' }}>🗓️ Start Date: {formattedStart}</p>
           )}
@@ -246,7 +299,7 @@ export default function LessonDetails() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', padding: '2rem', gap: '2rem' }}>
+      <div style={{ display: 'flex', padding: '2rem', gap: '2rem', height: "30%" }}>
         {/**
          * ─── Left Info Box ─────────────────────────────────────────────────────────
          */}
@@ -347,16 +400,86 @@ export default function LessonDetails() {
         {/**
          * ─── Right Reviews / Comments (placeholder) ─────────────────────────────────
          */}
-        <div style={{ flex: 1 }}>
-          <h3>📝 Reviews</h3>
-          {reviews.length === 0 ? (
+        <div style={{ flex: 1, borderRadius: 8, border: '1px solid #dddddd', padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", overflow: "auto" }}>
+          <div style={{display: "flex", alignItems: "center", justifyContent: "space-between"}}>
+            <h3>📝 Reviews</h3>
+            {enrolled && 
+              <button 
+                disabled={lesson?.open === null || !lesson?.open}
+                style={{
+                  background: (lesson?.open === null || !lesson?.open) ? "grey" : "",
+                  color: (lesson?.open === null || !lesson?.open) ? "white" : "",
+                  borderRadius: 8, 
+                  border: '1px solid #cccccc',
+                  cursor: (lesson?.open === null || !lesson?.open) ? "default" : "pointer"
+                }} 
+                onClick={addHandler}
+              >
+                {edit ? "Close" : "Add"}
+              </button>
+            }
+          </div>
+          {edit && <div style={{ flex: 1, borderRadius: 8, border: '1px solid #dddddd', padding: "1rem"}}>
+            <div style={{
+              display: "flex",
+              flexDirection: "column",
+              justifyContent: "flex-start",
+              gap: "0.5rem"
+            }}>
+              <div style={{display: "flex", justifyContent: "space-between", alignItems: "center"}}>
+                <div style={{textAlign: "start"}}>Description</div>
+                <div style={{display: "flex", alignItems: "center"}}>
+                  <div>⭐</div>
+                  <select
+                    defaultValue={addReview.rating}
+                    onChange={e => setAddReview(p => ({...p, rating: e.target.value }))}
+                    style={{
+                      padding: '0.4rem',
+                      fontSize: '0.9rem',
+                      borderRadius: 4,
+                      border: '1px solid #ccc'
+                    }}
+                  >
+                    <option value={1}>1</option>
+                    <option value={2}>2</option>
+                    <option value={3}>3</option>
+                    <option value={4}>4</option>
+                    <option value={5}>5</option>
+                  </select>
+                </div>
+              </div>
+              <textarea
+                type="text"
+                placeholder="Description"
+                maxLength={1000}
+                defaultValue={addReview.description}
+                onChange={e => setAddReview(p => ({...p, description: e.target.value}))}
+                style={{
+                  padding: '0.4rem',
+                  fontSize: '0.9rem',
+                  borderRadius: 4,
+                  border: '1px solid #ccc',
+                  resize: "none",
+                }}
+              />
+              <div style={{ display: "flex", justifyContent: "flex-end"}}>
+                <button onClick={handleReviewSubmit} style={{background: "#00A760", color: "white"}}>Submit</button>
+              </div>
+            </div>
+          </div>}
+          {(reviews.length === 0 && !edit) ? (
             <p style={{ color: '#777777', fontStyle: 'italic' }}>No reviews yet.</p>
           ) : (
             reviews.map((r, i) => (
-              <div key={i} style={{ marginBottom: '1rem', padding: '0.5rem', background: '#f5f5f5', borderRadius: 6 }}>
+              <div key={i} style={{ marginBottom: '1rem', padding: '0.5rem', background: '#eeeeee', borderRadius: 6 }}>
                 <div style={{ fontWeight: 'bold' }}>{r.userName}</div>
                 <div>⭐ {r.rating} / 5</div>
                 <p style={{ marginTop: '0.25rem' }}>{r.description}</p>
+                {(r.uid === uid) && 
+                  <div style={{ display: "flex", justifyContent: "flex-end"}}>
+                    <button onClick={() => handleDeleteReview(r.id)} style={{background: "red", color: "white"}}>delete</button>
+                  </div>
+                }
               </div>
             ))
           )}

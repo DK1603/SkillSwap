@@ -1,6 +1,6 @@
 // src/components/Dashboard.jsx
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import {
   watchTeaching,
@@ -8,7 +8,10 @@ import {
   fetchLessonsOnce,
   cancelEnrollment,
   deleteEnrolledShortcut,            // → CHANGED: import the new helper
-  fetchUserTeaching
+  fetchUserTeaching,
+  getEnrollments,
+  closeLesson,
+  fetchReviews
 } from '../services/firebase';
 import { getDoc, doc, updateDoc, collection } from 'firebase/firestore';
 import { db } from '../services/firebase';     // to get /users/{uid}
@@ -19,7 +22,7 @@ const categories = [
   { value: 'programming', icon: '💻', label: '프로그래밍' },
   { value: 'economics', icon: '💰', label: '경제' },
   { value: 'math', icon: '➗', label: '수학' },
-  { value: 'science', icon: '🔬', label: '과학'},
+  { value: 'science', icon: '🔬', label: '과학' },
   { value: 'cooking', icon: '🍳', label: '요리' },
   { value: 'design', icon: '🎨', label: '디자인' },
   { value: 'self-development', icon: '🧭', label: '자기계발' },
@@ -45,6 +48,8 @@ export default function Dashboard() {
   const [showModalFor, setShowModalFor] = useState(null);
   const [showModalMylessonFor, setShowModalMylessonFor] = useState(null);
   const [myLessonEdit, setMyLessonEdit] = useState(null);
+  const [showClose, setShowClose] = useState(false);
+  const [closeLessonObj, setCloseLessonObj] = useState(null);
 
   // ─── NEW: “Toast” message state ────────────────────────────────────────────────
   // We’ll use this to show a styled success/error message instead of window.alert
@@ -90,7 +95,13 @@ export default function Dashboard() {
       }
       const fetched = await fetchLessonsOnce();
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
-      setTeachingLessons(allLessons.filter(l => lessonIds.includes(l.id)));
+      const teaching = allLessons.filter(l => lessonIds.includes(l.id));
+      for (const idx in teaching) {
+        const lessonId = teaching[idx].id
+        const reviews = await fetchReviews(lessonId);
+        teaching[idx].reviews = reviews;
+      }
+      setTeachingLessons(teaching);
     });
     return () => unsubscribe();
   }, [uid]);
@@ -132,14 +143,48 @@ export default function Dashboard() {
 
   const handleEditClick = (lessonObj) => {
     setShowModalMylessonFor(lessonObj);
-    setMyLessonEdit({...lessonObj, tags: lessonObj.tags.map((t) => categories.find(c => c.value === t))});
+    setMyLessonEdit({ ...lessonObj, tags: lessonObj.tags.map((t) => categories.find(c => c.value === t)) });
   };
 
   // Close the modal
-  const closeMylessonModal = () => {
+  const closeLessonEditModal = () => {
     setShowModalMylessonFor(null);
     setMyLessonEdit(null);
   };
+
+  const handleCloseClick = useCallback(async (lessonObj) => {
+    const enrollments = await getEnrollments(lessonObj.id);
+    setCloseLessonObj({ ...lessonObj, enrollments: enrollments });
+    setShowClose(true);
+  }, [setCloseLessonObj, setShowClose])
+
+  const handleCloseConfirm = useCallback(async (lessonObj, afterBalance) => {
+    try {
+      await closeLesson(lessonObj, uid, afterBalance);
+      setCloseLessonObj(null);
+      setShowClose(false);
+
+      // update teaching lessons
+      const snapshot = await fetchUserTeaching(uid);
+      const lessonIds = snapshot.docs.map(d => d.id);
+
+      const fetched = await fetchLessonsOnce();
+      const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
+      setTeachingLessons(allLessons.filter(l => lessonIds.includes(l.id)));
+
+      // update profile
+      const userDocRef = doc(db, 'users', uid);
+      getDoc(userDocRef).then((snap) => {
+        if (snap.exists()) {
+          setProfileData(snap.data());
+        } else {
+          console.warn('No user doc exists at /users/' + uid);
+        }
+      });
+    } catch (err) {
+      console.error('Error closing lesson:', err)
+    }
+  }, [setCloseLessonObj, setShowClose, setTeachingLessons, setProfileData, uid])
 
   // Save profile changes when “Save” is clicked
   const handleLessonEdit = async () => {
@@ -158,7 +203,7 @@ export default function Dashboard() {
       const fetched = await fetchLessonsOnce();
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
       setTeachingLessons(allLessons.filter(l => lessonIds.includes(l.id)));
-      closeMylessonModal()
+      closeLessonEditModal()
     } catch (err) {
       console.error('Failed to update lesson:', err);
       showToast('Error updating Lesson: ' + err.message);
@@ -432,11 +477,40 @@ export default function Dashboard() {
                       background: '#1f1f1f'
                     }}
                   >
-                    <div>
-                      <strong style={{ color: '#fff' }}>{lesson.title}</strong>
-                      <br />
-                      <small style={{ color: '#aaa' }}>{createdAt}</small>
+                    <div style={{ display: "flex", gap: "2rem", alignItems: "center" }}>
+                      <div>
+                        <strong style={{ color: '#fff' }}>{lesson.title}</strong>
+                        <br />
+                        <small style={{ color: '#aaa' }}>{createdAt}</small>
+                      </div>
+                      {!lesson.open && <span
+                        style={{
+                          background: 'red',
+                          color: '#ffffff',
+                          padding: '0.2rem 0.5rem',
+                          borderRadius: '1rem',
+                          fontSize: '0.8rem'
+                        }}
+                      >
+                        closed
+                      </span>}
                     </div>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      <button
+                        disabled={!lesson.open || lesson.reviews.length === 0}
+                        onClick={() => handleCloseClick(lesson)}
+                        style={{
+                          backgroundColor: (!lesson.open || lesson.reviews.length !== 0) ? 'red' : "grey",
+                          color: '#fff',
+                          border: 'none',
+                          padding: '0.4rem 0.8rem',
+                          borderRadius: 4,
+                          cursor: (!lesson.open || lesson.reviews.length !== 0) ? 'pointer' : 'default',
+                          fontSize: '0.85rem',
+                        }}
+                      >
+                        Close
+                      </button>
                       <button
                         onClick={() => handleEditClick(lesson)}
                         style={{
@@ -451,6 +525,7 @@ export default function Dashboard() {
                       >
                         Edit
                       </button>
+                    </div>
                   </li>
                 );
               })}
@@ -577,7 +652,7 @@ export default function Dashboard() {
           }}>
             {/* Close “X” */}
             <button
-              onClick={closeMylessonModal}
+              onClick={closeLessonEditModal}
               style={{
                 position: 'absolute',
                 top: 10,
@@ -635,11 +710,11 @@ export default function Dashboard() {
                     border: '1px solid #ccc'
                   }}
                 >
-                {
-                  categories.map((c, idx) => {
-                    return <option key={c.value} value={c.value}>{c.label}</option>
-                  })
-                }
+                  {
+                    categories.map((c, idx) => {
+                      return <option key={c.value} value={c.value}>{c.label}</option>
+                    })
+                  }
                 </select>
               </div>
 
@@ -648,12 +723,12 @@ export default function Dashboard() {
                 justifyContent: "space-between",
                 color: "black"
               }}>
-                <p style={{color: "#fff"}}>Tags</p>
+                <p style={{ color: "#fff" }}>Tags</p>
                 <Select
                   isMulti
                   options={categories}
                   value={myLessonEdit.tags}
-                  onChange={(selected) => setMyLessonEdit(prev => ({...prev, tags: selected}))}
+                  onChange={(selected) => setMyLessonEdit(prev => ({ ...prev, tags: selected }))}
                   style={{
                     padding: '0.4rem',
                     marginBottom: '0.5rem',
@@ -663,9 +738,9 @@ export default function Dashboard() {
                     width: "50%"
                   }}
                 >
-                <p>
-                  Selected: {myLessonEdit.tags.map(opt => opt.label).join(', ')}
-                </p>
+                  <p>
+                    Selected: {myLessonEdit.tags.map(opt => opt.label).join(', ')}
+                  </p>
                 </Select>
               </div>
             </div>
@@ -675,15 +750,81 @@ export default function Dashboard() {
               color: "black"
             }}>
               <div></div>
-              <button 
+              <button
                 onClick={handleLessonEdit}
                 style={{
                   textAlign: "end"
-              }}>
+                }}>
                 Edit
               </button>
 
             </div>
+          </div>
+        </div>
+      )}
+
+      {/**
+       * ─── Confirmation Modal for Closing Lesson ──────────────────────────────────────
+       */}
+      {showClose && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0, 0, 0, 0.5)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 1000
+          }}
+        >
+          <div
+            style={{
+              background: '#ffffff',
+              color: "black",
+              padding: '2rem',
+              borderRadius: 8,
+              width: 300,
+              textAlign: 'center'
+            }}
+          >
+            <h3>Confirm Close</h3>
+            <p style={{ color: "red" }}>You cannot overturn the closement!</p>
+            <p>
+              Current Points: <strong>{profileData.pointBalance ?? 0} pts</strong>
+            </p>
+            <p>
+              Points After Closing: <strong>{(profileData.pointBalance ?? 0) + closeLessonObj.enrollments.length * closeLessonObj.cost} pts</strong>
+            </p>
+            <button
+              onClick={() => handleCloseConfirm(closeLessonObj, (profileData.pointBalance ?? 0) + closeLessonObj.enrollments.length * closeLessonObj.cost)}
+              style={{
+                marginTop: '1rem',
+                background: 'red',
+                color: '#ffffff',
+                padding: '0.5rem 1rem',
+                border: 'none',
+                borderRadius: 6,
+                fontSize: '1rem',
+                cursor: 'pointer'
+              }}
+            >
+              Confirm
+            </button>
+            <button
+              onClick={() => setShowClose(false)}
+              style={{
+                marginLeft: '1rem',
+                padding: '0.5rem 1rem',
+                fontSize: '1rem',
+                cursor: 'pointer'
+              }}
+            >
+              Cancel
+            </button>
           </div>
         </div>
       )}
