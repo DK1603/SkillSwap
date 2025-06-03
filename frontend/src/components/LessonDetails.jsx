@@ -47,7 +47,8 @@ export default function LessonDetails() {
           setErrorMessage('Lesson not found.');
           setLesson(null);
         } else {
-          setLesson({ id: snap.id, ...snap.data() });
+          const teacherName = await getUserDisplayName(snap.data().teacherUid);
+          setLesson({ id: snap.id, ...snap.data(), teacherName });
         }
       } catch (err) {
         console.error('Error fetching lesson:', err);
@@ -264,7 +265,7 @@ export default function LessonDetails() {
           {formattedStart && (
             <p style={{ margin: 0, textAlign: 'left' }}>🗓️ Start Date: {formattedStart}</p>
           )}
-          <p style={{ margin: 0, textAlign: 'left' }}>👨‍🏫 {teacherUid} ⭐ {rating.toFixed(1)}</p>
+          <p style={{ margin: 0, textAlign: 'left' }}>👨‍🏫 {lesson.teacherName || "알 수 없음"} ⭐ {rating.toFixed(1)}</p>
           <div style={{ display: 'flex', gap: '0.5rem' }}>
             {tags.map((tag, i) => (
               <span
@@ -299,7 +300,7 @@ export default function LessonDetails() {
         </div>
       </div>
 
-      <div style={{ display: 'flex', padding: '2rem', gap: '2rem', height: "30%" }}>
+      <div style={{ display: 'flex', padding: '2rem', gap: '2rem', alignItems: 'flex-start' }}>
         {/**
          * ─── Left Info Box ─────────────────────────────────────────────────────────
          */}
@@ -316,7 +317,7 @@ export default function LessonDetails() {
             <tbody>
               <tr>
                 <td>Teacher</td>
-                <td>{teacherUid}</td>
+                <td>{lesson.teacherName}</td>
               </tr>
               <tr>
                 <td>Capacity</td>
@@ -377,8 +378,18 @@ export default function LessonDetails() {
         {/**
          * ─── Center: (No chapters section, since you said "omit lecture hours")
          */}
-        <div style={{ flex: 2, background: '#ffffff', padding: '1rem', borderRadius: 8, border: '1px solid #dddddd' }}>
-          <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Lesson Details</h2>
+        <div style={{
+            flex: 2,
+            background: '#ffffff',
+            padding: '1rem',
+            borderRadius: 8,
+            border: '1px solid #dddddd',
+            minHeight: 'auto',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}>
+          <h1 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Lesson Details</h1>
           <p style={{ marginBottom: '1rem', lineHeight: 1.5 }}>{description}</p>
           <p style={{ marginBottom: '0.5rem' }}>
             <strong>Start Date & Time:</strong> {formattedStart || 'TBD'}
@@ -400,9 +411,9 @@ export default function LessonDetails() {
         {/**
          * ─── Right Reviews / Comments (placeholder) ─────────────────────────────────
          */}
-        <div style={{ flex: 1, borderRadius: 8, border: '1px solid #dddddd', padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", overflow: "auto" }}>
+        <div style={{ flex: 1, borderRadius: 8, background: '#ffffff', border: '1px solid #dddddd', padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", overflow: "auto", maxHeight: "350px", }}>
           <div style={{display: "flex", alignItems: "center", justifyContent: "space-between"}}>
-            <h3>📝 Reviews</h3>
+            <h3 style={{ marginTop: '0.25rem', marginBottom: '0.5rem' }}>📝 Reviews</h3>
             {enrolled && 
               <button 
                 disabled={lesson?.open === null || !lesson?.open}
