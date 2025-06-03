@@ -96,10 +96,10 @@ export default function LessonFeed() {
                 border: '1px solid #ccc'
               }}
             >
+              <option value="startSoon">Start Time</option>
               <option value="ratingHigh">Rating</option>
               {/* <option value="enrollmentHigh">Enrolled</option> */}
               <option value="costLow">Cost</option>
-              <option value="startSoon">Start Time</option>
             </select>
           </div>
         </div>
@@ -165,7 +165,9 @@ export default function LessonFeed() {
                   <div style={{ display: 'flex', gap: '0.5rem', fontSize: '0.85rem', color: '#666666' }}>
                     <span>💰 {lesson.cost} pts</span>
                     <span>👥 Capacity: {lesson.capacity}</span>
-                    <span>📡 {lesson.sessionType}</span>
+                    <span>
+                      {lesson.sessionType === 'in-person' ? '🏫' : '🧑‍💻'} {lesson.sessionType}
+                    </span>
                   </div>
                   <div style={{ fontSize: '0.85rem', color: '#888888' }}>
                     Difficulty: {lesson.difficulty}
