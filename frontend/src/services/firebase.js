@@ -190,6 +190,17 @@ export async function fetchReviews(lessonId) {
   return arr;
 }
 
+// ─── 6.7 Firestore: Fetch this user’s single review for a given lesson ────────────
+export async function fetchUserReview(lessonId, uid) {
+  const reviewsRef = collection(db, "lessons", lessonId, "reviews");
+  // Query for any review whose “uid” field matches the current user’s UID
+  const q = query(reviewsRef, where("uid", "==", uid));
+  const snapshot = await getDocs(q);
+  if (snapshot.empty) return null;
+  // Return the first (and only) matching review document’s data
+  return snapshot.docs[0].data();
+}
+
 // ─── 6.6 Firestore: Close Lesson ─────────────────────────────────────────────────
 export async function closeLesson(lessonObj, uid, afterBalance) {
   const lessonDocRef = doc(db, "lessons", lessonObj.id);
@@ -295,4 +306,58 @@ export async function viewMessages(chatId) {
     messages.push({id: sn.id, ...sn.data()});
   });
   return messages;
+}
+
+
+// ─── user history and review ────────────────────────────────────────────────
+
+
+// ─── 7.6 POINT HISTORY ───────────────────────────────────────────────────────────
+// Add a new entry under /users/{uid}/pointHistory/{autoId}
+export function addPointHistoryEntry(uid, entryData) {
+  // entryData example:
+  //   { timestamp: serverTimestamp(), change: +50, reason: "closed lesson" }
+  const pointHistCol = collection(db, 'users', uid, 'pointHistory');
+  return addDoc(pointHistCol, { ...entryData, timestamp: serverTimestamp() });
+}
+
+// Fetch all point‐history entries for a given user (ordered by timestamp descending)
+export async function fetchPointHistory(uid) {
+  const pointHistCol = collection(db, 'users', uid, 'pointHistory');
+  const q = query(pointHistCol, orderBy('timestamp', 'desc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+// ─── 7.7 LESSON HISTORY ──────────────────────────────────────────────────────────
+
+// 1) Fetch all lessons that this user has ever taught (teacherUid == uid)
+export async function fetchTeachingHistory(uid) {
+  // Query top‐level “lessons” where teacherUid == uid
+  const q = query(collection(db, 'lessons'), where('teacherUid', '==', uid));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+}
+
+// 2) Fetch all lessons that this user has ever enrolled in
+//    (i.e. look for any /lessons/{lessonId}/enrollments/{uid} document)
+export async function fetchEnrolledHistory(uid) {
+  // We have to scan every lesson’s sub‐collection of enrollments.
+  // Simplest approach: get every lesson, then check if there's a doc at /lessons/{lessonId}/enrollments/{uid}.
+  // (If you need high volume, consider a top‐level “enrollmentIndex” in Firestore.)
+  const allLessonsSnap = await getDocs(collection(db, 'lessons'));
+  const enrolledLessons = [];
+
+  for (let lessonDoc of allLessonsSnap.docs) {
+    const lessonId = lessonDoc.id;
+    const enrollDocRef = doc(db, 'lessons', lessonId, 'enrollments', uid);
+    const enrollSnap = await getDoc(enrollDocRef);
+    if (enrollSnap.exists()) {
+      // user did enroll at some point (even if later cancelled, the doc may be gone—
+      // so you could optionally store a “historical” flag elsewhere if you want permanent record).
+      enrolledLessons.push({ id: lessonId, ...lessonDoc.data() });
+    }
+  }
+
+  return enrolledLessons;
 }
