@@ -170,7 +170,13 @@ export default function Dashboard() {
 
       const fetched = await fetchLessonsOnce();
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
-      setTeachingLessons(allLessons.filter(l => lessonIds.includes(l.id)));
+      const teaching = allLessons.filter(l => lessonIds.includes(l.id));
+      for (const idx in teaching) {
+        const lessonId = teaching[idx].id
+        const reviews = await fetchReviews(lessonId);
+        teaching[idx].reviews = reviews;
+      }
+      setTeachingLessons(teaching);
 
       // update profile
       const userDocRef = doc(db, 'users', uid);
@@ -202,7 +208,13 @@ export default function Dashboard() {
 
       const fetched = await fetchLessonsOnce();
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
-      setTeachingLessons(allLessons.filter(l => lessonIds.includes(l.id)));
+      const teaching = allLessons.filter(l => lessonIds.includes(l.id));
+      for (const idx in teaching) {
+        const lessonId = teaching[idx].id
+        const reviews = await fetchReviews(lessonId);
+        teaching[idx].reviews = reviews;
+      }
+      setTeachingLessons(teaching);
       closeLessonEditModal()
     } catch (err) {
       console.error('Failed to update lesson:', err);
