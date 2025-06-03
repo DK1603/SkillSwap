@@ -7,14 +7,16 @@ import {
   watchEnrolled,
   fetchLessonsOnce,
   cancelEnrollment,
-  deleteEnrolledShortcut,            // → CHANGED: import the new helper
+  deleteEnrolledShortcut,
   fetchUserTeaching,
   getEnrollments,
   closeLesson,
-  fetchReviews
+  fetchReviews,
+  fetchUserReview,
+  fetchEnrolledHistory
 } from '../services/firebase';
 import { getDoc, doc, updateDoc, collection } from 'firebase/firestore';
-import { db } from '../services/firebase';     // to get /users/{uid}
+import { db } from '../services/firebase';
 import { Link, useNavigate } from 'react-router-dom';
 import Select from 'react-select';
 
@@ -25,11 +27,11 @@ const categories = [
   { value: 'science', icon: '🔬', label: '과학' },
   { value: 'cooking', icon: '🍳', label: '요리' },
   { value: 'design', icon: '🎨', label: '디자인' },
-  { value: 'self-development', icon: '🧭', label: '자기계발' },
+  { value: 'self-development', icon: '🧭', label: '자기계발' }
 ];
 
 export default function Dashboard() {
-  const { user: authUser } = useAuth(); // Firebase Auth user
+  const { user: authUser } = useAuth();
   const uid = authUser?.uid;
   const navigate = useNavigate();
 
@@ -44,15 +46,18 @@ export default function Dashboard() {
   const [teachingLessons, setTeachingLessons] = useState([]);   // { id, …lessonData }
   const [enrolledLessons, setEnrolledLessons] = useState([]);   // { id, …lessonData }
 
-  // Which lesson’s modal is open? null = no modal
+  // Modal state
   const [showModalFor, setShowModalFor] = useState(null);
   const [showModalMylessonFor, setShowModalMylessonFor] = useState(null);
   const [myLessonEdit, setMyLessonEdit] = useState(null);
   const [showClose, setShowClose] = useState(false);
   const [closeLessonObj, setCloseLessonObj] = useState(null);
 
-  // ─── NEW: “Toast” message state ────────────────────────────────────────────────
-  // We’ll use this to show a styled success/error message instead of window.alert
+  // ─── NEW: History & Reviews modal state ───────────────────────────────────────
+  const [showHistory, setShowHistory] = useState(false);
+  const [allLessonsHistory, setAllLessonsHistory] = useState([]);
+
+  // ─── NEW: Toast message ───────────────────────────────────────────────────────
   const [toastMessage, setToastMessage] = useState('');
 
   // ─── 1) Load /users/{uid} into profileData ────────────────────────────────────
@@ -78,6 +83,7 @@ export default function Dashboard() {
         photoURL: profileData.photoURL
       });
       setEditing(false);
+      showToast('Profile updated.');
     } catch (err) {
       console.error('Failed to update profile:', err);
       showToast('Error updating profile: ' + err.message);
@@ -97,7 +103,7 @@ export default function Dashboard() {
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
       const teaching = allLessons.filter(l => lessonIds.includes(l.id));
       for (const idx in teaching) {
-        const lessonId = teaching[idx].id
+        const lessonId = teaching[idx].id;
         const reviews = await fetchReviews(lessonId);
         teaching[idx].reviews = reviews;
       }
@@ -123,7 +129,6 @@ export default function Dashboard() {
   }, [uid]);
 
   // ─── NEW: showToast helper ───────────────────────────────────────────────────
-  // Sets toastMessage for 3 seconds, then clears it
   const showToast = (msg) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(''), 3000);
@@ -131,22 +136,22 @@ export default function Dashboard() {
 
   // ─── 4) Modal‐related handlers ───────────────────────────────────────────────
 
-  // “View” clicked on an enrolled lesson → open the modal
   const handleViewClick = (lessonObj) => {
     setShowModalFor(lessonObj);
   };
 
-  // Close the modal
   const closeModal = () => {
     setShowModalFor(null);
   };
 
   const handleEditClick = (lessonObj) => {
     setShowModalMylessonFor(lessonObj);
-    setMyLessonEdit({ ...lessonObj, tags: lessonObj.tags.map((t) => categories.find(c => c.value === t)) });
+    setMyLessonEdit({
+      ...lessonObj,
+      tags: lessonObj.tags.map(t => categories.find(c => c.value === t))
+    });
   };
 
-  // Close the modal
   const closeLessonEditModal = () => {
     setShowModalMylessonFor(null);
     setMyLessonEdit(null);
@@ -154,9 +159,9 @@ export default function Dashboard() {
 
   const handleCloseClick = useCallback(async (lessonObj) => {
     const enrollments = await getEnrollments(lessonObj.id);
-    setCloseLessonObj({ ...lessonObj, enrollments: enrollments });
+    setCloseLessonObj({ ...lessonObj, enrollments });
     setShowClose(true);
-  }, [setCloseLessonObj, setShowClose])
+  }, []);
 
   const handleCloseConfirm = useCallback(async (lessonObj, afterBalance) => {
     try {
@@ -164,35 +169,31 @@ export default function Dashboard() {
       setCloseLessonObj(null);
       setShowClose(false);
 
-      // update teaching lessons
+      // Refresh teaching lessons
       const snapshot = await fetchUserTeaching(uid);
       const lessonIds = snapshot.docs.map(d => d.id);
-
       const fetched = await fetchLessonsOnce();
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
       const teaching = allLessons.filter(l => lessonIds.includes(l.id));
       for (const idx in teaching) {
-        const lessonId = teaching[idx].id
-        const reviews = await fetchReviews(lessonId);
+        const reviews = await fetchReviews(teaching[idx].id);
         teaching[idx].reviews = reviews;
       }
       setTeachingLessons(teaching);
 
-      // update profile
+      // Refresh profile
       const userDocRef = doc(db, 'users', uid);
       getDoc(userDocRef).then((snap) => {
-        if (snap.exists()) {
-          setProfileData(snap.data());
-        } else {
-          console.warn('No user doc exists at /users/' + uid);
-        }
+        if (snap.exists()) setProfileData(snap.data());
       });
-    } catch (err) {
-      console.error('Error closing lesson:', err)
-    }
-  }, [setCloseLessonObj, setShowClose, setTeachingLessons, setProfileData, uid])
 
-  // Save profile changes when “Save” is clicked
+      showToast('Lesson closed and points refunded.');
+    } catch (err) {
+      console.error('Error closing lesson:', err);
+      showToast('Failed to close lesson: ' + err.message);
+    }
+  }, [uid]);
+
   const handleLessonEdit = async () => {
     if (!myLessonEdit || !uid) return;
     const lessonDocRef = doc(db, 'lessons', myLessonEdit.id);
@@ -200,78 +201,110 @@ export default function Dashboard() {
       await updateDoc(lessonDocRef, {
         title: myLessonEdit.title,
         category: myLessonEdit.category,
-        tags: myLessonEdit.tags.map((t) => t.value)
+        tags: myLessonEdit.tags.map(t => t.value)
       });
 
       const snapshot = await fetchUserTeaching(uid);
       const lessonIds = snapshot.docs.map(d => d.id);
-
       const fetched = await fetchLessonsOnce();
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
       const teaching = allLessons.filter(l => lessonIds.includes(l.id));
       for (const idx in teaching) {
-        const lessonId = teaching[idx].id
-        const reviews = await fetchReviews(lessonId);
+        const reviews = await fetchReviews(teaching[idx].id);
         teaching[idx].reviews = reviews;
       }
       setTeachingLessons(teaching);
-      closeLessonEditModal()
+      closeLessonEditModal();
+      showToast('Lesson updated.');
     } catch (err) {
       console.error('Failed to update lesson:', err);
-      showToast('Error updating Lesson: ' + err.message);
+      showToast('Error updating lesson: ' + err.message);
     }
   };
 
-  // console.log(teachingLessons);
-
   // ─── “Delete Enrollment” flow ────────────────────────────────────────────────
   const handleDeleteEnrollment = async (lessonObj) => {
-    // 1) Prompt for reason
     const reason = window.prompt('Please enter a reason for canceling this enrollment:');
-    if (reason === null) {
-      // User pressed “Cancel” in the prompt → do nothing
-      return;
-    }
+    if (reason === null) return;
     if (reason.trim() === '') {
       showToast('Cancellation reason cannot be empty.');
       return;
     }
-
     try {
-      // 2.a) Delete from /lessons/{lessonId}/enrollments/{uid}
       await cancelEnrollment(lessonObj.id, uid);
-
-      // 2.b) ALSO delete the “enrolled” shortcut at /users/{uid}/enrolled/{lessonId}
       await deleteEnrolledShortcut(uid, lessonObj.id);
-
-      // 3) Remove the lesson immediately from local state
-      setEnrolledLessons((prev) => prev.filter(l => l.id !== lessonObj.id));
-
-      // 4) Show a React “toast” message
-      showToast('Enrollment has been canceled successfully.');
+      setEnrolledLessons(prev => prev.filter(l => l.id !== lessonObj.id));
+      showToast('Enrollment canceled.');
       closeModal();
     } catch (err) {
       console.error('Error deleting enrollment:', err);
       if (err.code === 'permission-denied') {
-        showToast('You can only cancel an enrollment 2+ minutes after enrolling.');
+        showToast('You can only cancel at least 2 minutes after enrolling.');
       } else {
-        showToast('Failed to delete enrollment: ' + err.message);
+        showToast('Failed to cancel: ' + err.message);
       }
     }
   };
 
-  // ─── “Contact Teacher (Chat)” → navigate to a chat route ─────────────────────
   const handleContact = (lessonObj) => {
-    const teacherId = lessonObj.teacherUid;
-    navigate(`/chats?member=${teacherId}`);
+    navigate(`/chats?member=${lessonObj.teacherUid}`);
     closeModal();
   };
 
-  // ─── “View in Lesson Feed” → navigate to /lesson/{lessonId} ─────────────────
   const handleViewInFeed = (lessonObj) => {
     navigate(`/lesson/${lessonObj.id}`);
     closeModal();
   };
+
+  // ─── NEW: When showHistory toggles on, gather history & reviews ─────────────────
+  useEffect(() => {
+    if (!showHistory || !uid) return;
+
+    (async () => {
+      try {
+        // 1) Taught lessons IDs
+        const teachingSnap = await fetchUserTeaching(uid);
+        const taughtIds = teachingSnap.docs.map(d => d.id);
+        
+
+        // !!!!!!!!
+        // 2) Attended lessons IDs
+        const attendedLessons = await fetchEnrolledHistory(uid);
+        const attendedIds = attendedLessons.map(l => l.id);
+
+        // 3) Unique lesson IDs
+        const uniqueLessonIds = Array.from(new Set([...taughtIds, ...attendedIds]));
+
+        // 4) Build history array
+        const historyArr = [];
+        for (let lessonId of uniqueLessonIds) {
+          const lessonDoc = await getDoc(doc(db, 'lessons', lessonId));
+          if (!lessonDoc.exists()) continue;
+          const lessonData = lessonDoc.data();
+
+          // 4.a) Determine role
+          const role = taughtIds.includes(lessonId) ? 'Taught' : 'Attended';
+
+          // 4.b) Fetch this user’s review (if any)
+          const reviewDoc = await fetchUserReview(lessonId, uid);
+          const userReviewText = reviewDoc?.text || '— No review yet —';
+
+          historyArr.push({
+            lessonId,
+            title: lessonData.title,
+            role,
+            yourReview: userReviewText,
+            closed: lessonData.open === false
+          });
+        }
+
+        setAllLessonsHistory(historyArr);
+      } catch (err) {
+        console.error('Failed to load history:', err);
+        showToast('Error loading history.');
+      }
+    })();
+  }, [showHistory, uid]);
 
   if (!authUser) {
     return (
@@ -409,6 +442,23 @@ export default function Dashboard() {
       <div style={{ flex: 1 }}>
         <h2 style={{ marginBottom: '1rem', color: '#ccc' }}>Dashboard</h2>
 
+        {/* --- History & Reviews Button --- */}
+        <button
+          onClick={() => setShowHistory(true)}
+          style={{
+            marginBottom: '1.5rem',
+            backgroundColor: '#ffc107',
+            color: '#000',
+            border: 'none',
+            padding: '0.6rem 1.2rem',
+            borderRadius: 4,
+            cursor: 'pointer',
+            fontSize: '0.95rem'
+          }}
+        >
+          View My History & Reviews
+        </button>
+
         {/* --- My Upcoming (Enrolled) Lessons --- */}
         <section style={{ marginBottom: '2rem' }}>
           <h3 style={{ fontSize: '1.1rem', marginBottom: '0.5rem', color: '#bbb' }}>
@@ -475,6 +525,10 @@ export default function Dashboard() {
                 const createdAt = lesson.createdAt && lesson.createdAt.seconds
                   ? new Date(lesson.createdAt.seconds * 1000).toLocaleString()
                   : 'TBD';
+                if (lesson.open === false) {
+                  // Hide closed lessons from main “Teaching” list
+                  return null;
+                }
                 return (
                   <li
                     key={lesson.id}
@@ -489,36 +543,25 @@ export default function Dashboard() {
                       background: '#1f1f1f'
                     }}
                   >
-                    <div style={{ display: "flex", gap: "2rem", alignItems: "center" }}>
+                    <div style={{ display: 'flex', gap: '2rem', alignItems: 'center' }}>
                       <div>
                         <strong style={{ color: '#fff' }}>{lesson.title}</strong>
                         <br />
                         <small style={{ color: '#aaa' }}>{createdAt}</small>
                       </div>
-                      {!lesson.open && <span
-                        style={{
-                          background: 'red',
-                          color: '#ffffff',
-                          padding: '0.2rem 0.5rem',
-                          borderRadius: '1rem',
-                          fontSize: '0.8rem'
-                        }}
-                      >
-                        closed
-                      </span>}
                     </div>
-                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button
                         disabled={!lesson.open || lesson.reviews.length === 0}
                         onClick={() => handleCloseClick(lesson)}
                         style={{
-                          backgroundColor: (!lesson.open || lesson.reviews.length !== 0) ? 'red' : "grey",
+                          backgroundColor: '#dc3545',
                           color: '#fff',
                           border: 'none',
                           padding: '0.4rem 0.8rem',
                           borderRadius: 4,
-                          cursor: (!lesson.open || lesson.reviews.length !== 0) ? 'pointer' : 'default',
-                          fontSize: '0.85rem',
+                          cursor: 'pointer',
+                          fontSize: '0.85rem'
                         }}
                       >
                         Close
@@ -546,7 +589,7 @@ export default function Dashboard() {
         </section>
       </div>
 
-      {/* ─── Modal Popup (conditionally rendered) ─────────────────────────────────── */}
+      {/* ─── Modal Popup for Enrolled Lesson ─────────────────────────────────────── */}
       {showModalFor && (
         <div style={{
           position: 'fixed',
@@ -567,7 +610,6 @@ export default function Dashboard() {
             position: 'relative',
             boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
           }}>
-            {/* Close “X” */}
             <button
               onClick={closeModal}
               style={{
@@ -583,13 +625,10 @@ export default function Dashboard() {
             >
               &times;
             </button>
-
             <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>
               {showModalFor.title}
             </h3>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              {/* 1) Contact Teacher (Chat) */}
               <button
                 onClick={() => handleContact(showModalFor)}
                 style={{
@@ -604,8 +643,6 @@ export default function Dashboard() {
               >
                 Contact Teacher (Chat)
               </button>
-
-              {/* 2) Delete Enrollment */}
               <button
                 onClick={() => handleDeleteEnrollment(showModalFor)}
                 style={{
@@ -620,8 +657,6 @@ export default function Dashboard() {
               >
                 Delete Enrollment
               </button>
-
-              {/* 3) View in Lesson Feed */}
               <button
                 onClick={() => handleViewInFeed(showModalFor)}
                 style={{
@@ -641,6 +676,7 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ─── Modal Popup for Teaching Lesson Edit ───────────────────────────────── */}
       {showModalMylessonFor && (
         <div style={{
           position: 'fixed',
@@ -649,7 +685,7 @@ export default function Dashboard() {
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          zIndex: 2000,
+          zIndex: 2000
         }}>
           <div style={{
             background: '#1f1f1f',
@@ -657,12 +693,10 @@ export default function Dashboard() {
             width: '90%',
             maxWidth: 380,
             padding: '1.5rem',
-            // color: 'black',
-            color: "#fff",
+            color: '#fff',
             position: 'relative',
             boxShadow: '0 4px 12px rgba(0,0,0,0.5)'
           }}>
-            {/* Close “X” */}
             <button
               onClick={closeLessonEditModal}
               style={{
@@ -678,16 +712,11 @@ export default function Dashboard() {
             >
               &times;
             </button>
-
             <h3 style={{ marginTop: 0, marginBottom: '1rem' }}>
               {showModalMylessonFor.title}
             </h3>
-
             <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-              }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <p>Title</p>
                 <input
                   type="text"
@@ -703,17 +732,11 @@ export default function Dashboard() {
                   }}
                 />
               </div>
-
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-              }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                 <p>Category</p>
                 <select
-                  type="text"
                   value={myLessonEdit.category}
                   onChange={e => setMyLessonEdit(prev => ({ ...prev, category: e.target.value }))}
-                  placeholder="Title"
                   style={{
                     padding: '0.4rem',
                     marginBottom: '0.5rem',
@@ -722,62 +745,45 @@ export default function Dashboard() {
                     border: '1px solid #ccc'
                   }}
                 >
-                  {
-                    categories.map((c, idx) => {
-                      return <option key={c.value} value={c.value}>{c.label}</option>
-                    })
-                  }
+                  {categories.map(c => (
+                    <option key={c.value} value={c.value}>{c.label}</option>
+                  ))}
                 </select>
               </div>
-
-              <div style={{
-                display: "flex",
-                justifyContent: "space-between",
-                color: "black"
-              }}>
-                <p style={{ color: "#fff" }}>Tags</p>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <p style={{ color: '#fff' }}>Tags</p>
                 <Select
                   isMulti
                   options={categories}
                   value={myLessonEdit.tags}
-                  onChange={(selected) => setMyLessonEdit(prev => ({ ...prev, tags: selected }))}
-                  style={{
-                    padding: '0.4rem',
-                    marginBottom: '0.5rem',
-                    fontSize: '0.9rem',
-                    borderRadius: 4,
-                    border: '1px solid #ccc',
-                    width: "50%"
+                  onChange={selected => setMyLessonEdit(prev => ({ ...prev, tags: selected }))}
+                  styles={{
+                    container: base => ({ ...base, width: '60%' })
                   }}
-                >
-                  <p>
-                    Selected: {myLessonEdit.tags.map(opt => opt.label).join(', ')}
-                  </p>
-                </Select>
+                />
               </div>
             </div>
-            <div style={{
-              display: "flex",
-              justifyContent: "space-between",
-              color: "black"
-            }}>
-              <div></div>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '1rem' }}>
               <button
                 onClick={handleLessonEdit}
                 style={{
-                  textAlign: "end"
-                }}>
-                Edit
+                  backgroundColor: '#27ae60',
+                  color: '#fff',
+                  border: 'none',
+                  padding: '0.5rem 1rem',
+                  borderRadius: 4,
+                  cursor: 'pointer',
+                  fontSize: '0.9rem'
+                }}
+              >
+                Save
               </button>
-
             </div>
           </div>
         </div>
       )}
 
-      {/**
-       * ─── Confirmation Modal for Closing Lesson ──────────────────────────────────────
-       */}
+      {/* ─── Confirmation Modal for Closing Lesson ────────────────────────────────── */}
       {showClose && (
         <div
           style={{
@@ -790,13 +796,13 @@ export default function Dashboard() {
             display: 'flex',
             justifyContent: 'center',
             alignItems: 'center',
-            zIndex: 1000
+            zIndex: 3000
           }}
         >
           <div
             style={{
               background: '#ffffff',
-              color: "black",
+              color: '#000000',
               padding: '2rem',
               borderRadius: 8,
               width: 300,
@@ -804,18 +810,26 @@ export default function Dashboard() {
             }}
           >
             <h3>Confirm Close</h3>
-            <p style={{ color: "red" }}>You cannot overturn the closement!</p>
+            <p style={{ color: 'red' }}>You cannot undo this action!</p>
             <p>
               Current Points: <strong>{profileData.pointBalance ?? 0} pts</strong>
             </p>
             <p>
-              Points After Closing: <strong>{(profileData.pointBalance ?? 0) + closeLessonObj.enrollments.length * closeLessonObj.cost} pts</strong>
+              Points After Closing:{' '}
+              <strong>
+                {(profileData.pointBalance ?? 0) + closeLessonObj.enrollments.length * closeLessonObj.cost} pts
+              </strong>
             </p>
             <button
-              onClick={() => handleCloseConfirm(closeLessonObj, (profileData.pointBalance ?? 0) + closeLessonObj.enrollments.length * closeLessonObj.cost)}
+              onClick={() =>
+                handleCloseConfirm(
+                  closeLessonObj,
+                  (profileData.pointBalance ?? 0) + closeLessonObj.enrollments.length * closeLessonObj.cost
+                )
+              }
               style={{
                 marginTop: '1rem',
-                background: 'red',
+                background: '#c0392b',
                 color: '#ffffff',
                 padding: '0.5rem 1rem',
                 border: 'none',
@@ -837,6 +851,112 @@ export default function Dashboard() {
             >
               Cancel
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ─── NEW: History & Reviews Modal ───────────────────────────────────────── */}
+      {showHistory && (
+        <div style={{
+          position: 'fixed',
+          top: 0, left: 0, right: 0, bottom: 0,
+          background: 'rgba(0,0,0,0.75)',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          zIndex: 5000
+        }}>
+          <div style={{
+            background: '#2c2c2c',
+            borderRadius: 8,
+            width: '90%',
+            maxWidth: 500,
+            maxHeight: '80vh',
+            overflowY: 'auto',
+            padding: '1.5rem',
+            color: '#fff',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+            position: 'relative'
+          }}>
+            <button
+              onClick={() => setShowHistory(false)}
+              style={{
+                position: 'absolute',
+                top: 12,
+                right: 16,
+                background: 'transparent',
+                border: 'none',
+                color: '#bbb',
+                fontSize: '1.4rem',
+                cursor: 'pointer'
+              }}
+            >
+              &times;
+            </button>
+
+            <h2 style={{ marginTop: 0, marginBottom: '1rem', color: '#ffc107' }}>
+              My Course History & Reviews
+            </h2>
+
+            {allLessonsHistory.length === 0 ? (
+              <p style={{ color: '#ccc' }}>You have no history yet.</p>
+            ) : (
+              <ul style={{ listStyle: 'none', padding: 0 }}>
+                {allLessonsHistory.map(entry => (
+                  <li
+                    key={entry.lessonId}
+                    style={{
+                      background: '#3a3a3a',
+                      padding: '0.8rem 1rem',
+                      borderRadius: 4,
+                      marginBottom: '0.8rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '1rem', color: '#fff' }}>
+                        {entry.title}
+                      </strong>
+                      <span style={{
+                        fontSize: '0.85rem',
+                        color: entry.role === 'Taught' ? '#00e676' : '#29b6f6'
+                      }}>
+                        {entry.role}
+                      </span>
+                    </div>
+                    {entry.closed && (
+                      <div style={{
+                        marginTop: '0.3rem',
+                        background: '#c0392b',
+                        color: '#fff',
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '0.5rem',
+                        display: 'inline-block',
+                        fontSize: '0.75rem'
+                      }}>
+                        Closed
+                      </div>
+                    )}
+                    <p style={{ margin: '0.6rem 0', fontSize: '0.9rem', color: '#ddd' }}>
+                      <strong>My Review:</strong> <em>{entry.yourReview}</em>
+                    </p>
+                    <button
+                      onClick={() => navigate(`/lesson/${entry.lessonId}`)}
+                      style={{
+                        backgroundColor: '#ff5722',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '0.5rem 1rem',
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      View Lesson Details
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       )}
