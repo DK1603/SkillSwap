@@ -134,7 +134,10 @@ export async function calculateAverageRating(lessonId) {
     }
   });
 
-  return count > 0 ? total / count : 0;
+  const avg = count > 0 ? total / count : 0;
+
+  // 소수점 첫째 자리까지 반올림
+  return Math.round(avg * 10) / 10;
 }
 
 // ─── 5. Firestore: “users” Collection ────────────────────────────────────────────
