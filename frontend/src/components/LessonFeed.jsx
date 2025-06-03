@@ -9,7 +9,7 @@ import { Timestamp } from 'firebase/firestore';
 export default function LessonFeed() {
   const navigate = useNavigate();
   // const [lessonsW, setLessons] = useState([]);
-  const [sortMode, setSortMode] = useState('startTime'); 
+  const [sortMode, setSortMode] = useState('startTime');
   const [selectedTag, setSelectedTag] = useState('all');
   const [lessonsWithTeachers, setLessonsWithTeachers] = useState([]);
   // You can sort by 'startTime' or by 'cost' or any other numeric field.
@@ -145,7 +145,14 @@ export default function LessonFeed() {
                 {/**
                  * Thumbnail area (gray placeholder)
                  */}
-                <div style={{ height: '140px', backgroundColor: '#dddddd' }} />
+                {(lesson?.thumbnailURL ?? "").trim() === "" ?
+                  <div style={{ height: '140px', backgroundColor: '#dddddd' }} /> :
+                  <img
+                    src={lesson.thumbnailURL || '/assets/profile-placeholder.png'}
+                    alt="thumbnail"
+                    style={{ width: "100%", height: '140px', borderRadius: 8, objectFit: 'cover', marginBottom: '0.5rem' }}
+                  />
+                }
 
                 {/**
                  * Card content
@@ -172,9 +179,9 @@ export default function LessonFeed() {
                   <div style={{ fontSize: '0.85rem', color: '#888888' }}>
                     Difficulty: {lesson.difficulty}
                   </div>
-                    <div style={{ fontSize: '0.85rem', color: '#ffaa00' }}>
-                      ⭐ {lesson.rating} / 5
-                    </div>
+                  <div style={{ fontSize: '0.85rem', color: '#ffaa00' }}>
+                    ⭐ {lesson.rating} / 5
+                  </div>
                 </div>
               </div>
             );
