@@ -8,36 +8,79 @@ export default function NavBar() {
   const { user, logout } = useAuth();
 
   return (
-    <nav style={{ padding: '1rem', background: '#222', color: '#fff', display: 'flex', gap: '1rem' }}>
-      <Link to="/" style={{ color: '#fff', textDecoration: 'none' }}>Lessons</Link>
+    <nav style={{
+      background: '#111', 
+      color: '#fff', 
+      display: 'flex', 
+      alignItems: 'center', 
+      padding: '0.75rem 1.5rem', 
+      boxShadow: '0 2px 4px rgba(0,0,0,0.5)'
+    }}>
+      {/* Brand */}
+      <Link to="/" style={{
+        fontSize: '1.5rem',
+        fontWeight: 'bold',
+        color: '#fff',
+        textDecoration: 'none',
+        marginRight: '2rem'
+      }}>
+        SkillSwap
+      </Link>
 
-      {user ? (
-        <>
-          <Link to="/dashboard" style={{ color: '#fff', textDecoration: 'none' }}>Profile</Link>
-          <Link to="/chats" style={{ color: '#fff', textDecoration: 'none' }}>Chats</Link>
+      {/* Left-side Links */}
+      <div style={{ display: 'flex', gap: '1.25rem' }}>
+        <Link to="/" style={linkStyle}>Lessons</Link>
+        {user && <Link to="/dashboard" style={linkStyle}>Profile</Link>}
+        {user && <Link to="/chats" style={linkStyle}>Chats</Link>}
+      </div>
+
+      {/* Right-side Actions */}
+      <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        {user ? (
           <button
             onClick={logout}
             style={{
-              marginLeft: 'auto',
               background: 'transparent',
-              border: 'none',
+              border: '1px solid #555',
               color: '#fff',
-              cursor: 'pointer'
+              padding: '0.4rem 0.8rem',
+              borderRadius: '4px',
+              cursor: 'pointer',
+              fontSize: '0.95rem',
+              transition: 'background 0.2s, border-color 0.2s'
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = '#333'}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'transparent';
+              e.currentTarget.style.borderColor = '#555';
             }}
           >
             Logout
           </button>
-        </>
-      ) : (
-        <>
-          <Link to="/login" style={{ marginLeft: 'auto', color: '#fff', textDecoration: 'none' }}>
-            Login
-          </Link>
-          <Link to="/signup" style={{ color: '#fff', textDecoration: 'none', marginLeft: '1rem' }}>
-            Sign Up
-          </Link>
-        </>
-      )}
+        ) : (
+          <>
+            <Link to="/login" style={linkStyle}>Login</Link>
+            <Link to="/signup" style={linkStyle}>Sign Up</Link>
+          </>
+        )}
+      </div>
     </nav>
   );
 }
+
+// Shared link style
+const linkStyle = {
+  color: '#ddd',
+  textDecoration: 'none',
+  fontSize: '1rem',
+  padding: '0.4rem 0.6rem',
+  borderRadius: '4px',
+  transition: 'background 0.2s',
+  whiteSpace: 'nowrap'
+};
+
+// When hovering over links
+Object.assign(linkStyle, {
+  cursor: 'pointer'
+});
+
