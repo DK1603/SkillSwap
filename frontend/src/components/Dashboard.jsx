@@ -13,7 +13,8 @@ import {
   closeLesson,
   fetchReviews,
   fetchUserReview,
-  fetchEnrolledHistory
+  fetchEnrolledHistory,
+  getUserDisplayName
 } from '../services/firebase';
 import { getDoc, doc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
@@ -21,13 +22,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import Select from 'react-select';
 
 const categories = [
-  { value: 'programming', icon: '💻', label: '프로그래밍' },
-  { value: 'economics', icon: '💰', label: '경제' },
-  { value: 'math', icon: '➗', label: '수학' },
-  { value: 'science', icon: '🔬', label: '과학' },
-  { value: 'cooking', icon: '🍳', label: '요리' },
-  { value: 'design', icon: '🎨', label: '디자인' },
-  { value: 'self-development', icon: '🧭', label: '자기계발' }
+  { value: 'programming', icon: '💻', label: 'Programming' },
+  { value: 'economics', icon: '💰', label: 'Economics' },
+  { value: 'math', icon: '➗', label: 'Math' },
+  { value: 'science', icon: '🔬', label: 'Science' },
+  { value: 'cooking', icon: '🍳', label: 'Cooking' },
+  { value: 'design', icon: '🎨', label: 'Design' },
+  { value: 'self-development', icon: '🧭', label: 'Extra-skills' }
 ];
 
 export default function Dashboard() {
@@ -99,10 +100,14 @@ export default function Dashboard() {
       const fetched = await fetchLessonsOnce();
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
       const teaching = allLessons.filter(l => lessonIds.includes(l.id));
-      for (const idx in teaching) {
-        const lessonId = teaching[idx].id;
+      for (const lIdx in teaching) {
+        const lessonId = teaching[lIdx].id;
         const reviews = await fetchReviews(lessonId);
-        teaching[idx].reviews = reviews;
+        for (const rIdx in reviews) {
+          const reviewerName = await getUserDisplayName(reviews[rIdx].uid);
+          reviews[rIdx].reviewerName = reviewerName;
+        }
+        teaching[lIdx].reviews = reviews;
       }
       setTeachingLessons(teaching);
     });
@@ -120,7 +125,17 @@ export default function Dashboard() {
       }
       const fetched = await fetchLessonsOnce();
       const allLessons = fetched.docs.map(d => ({ id: d.id, ...d.data() }));
-      setEnrolledLessons(allLessons.filter(l => lessonIds.includes(l.id)));
+      const enrolling = allLessons.filter(l => lessonIds.includes(l.id));
+      for (const idx in enrolling) {
+        const lessonId = enrolling[idx].id;
+        const reviews = await fetchReviews(lessonId);
+        for (const rIdx in reviews) {
+          const reviewerName = await getUserDisplayName(reviews[rIdx].uid);
+          reviews[rIdx].reviewerName = reviewerName;
+        }
+        enrolling[idx].reviews = reviews;
+      }
+      setEnrolledLessons(enrolling);
     });
     return () => unsubscribe();
   }, [uid]);
@@ -279,7 +294,7 @@ export default function Dashboard() {
           const lessonData = lessonDoc.data();
 
           // 4.a) Determine role
-          const role = taughtIds.includes(lessonId) ? 'Taught' : 'Attended';
+          const role = taughtIds.includes(lessonId) ? 'Teaching' : 'Attendding';
 
           // 4.b) Fetch this user’s review (if any)
           const reviewDoc = await fetchUserReview(lessonId, uid);
@@ -301,6 +316,17 @@ export default function Dashboard() {
       }
     })();
   }, [showHistory, uid]);
+
+  const onShowHistoryClick = useCallback(async () => {
+    try {
+      setShowHistory(true);
+      console.log(teachingLessons);
+      console.log(enrolledLessons);
+    } catch(err) {
+      console.error('Failed to load history:', err);
+      showToast('Error loading history.');
+    }
+  }, [setShowHistory, uid, teachingLessons, enrolledLessons])
 
   if (!authUser) {
     return (
@@ -440,7 +466,7 @@ export default function Dashboard() {
 
         {/* --- History & Reviews Button --- */}
         <button
-          onClick={() => setShowHistory(true)}
+          onClick={onShowHistoryClick}
           style={{
             marginBottom: '1.5rem',
             backgroundColor: '#ffc107',
@@ -772,10 +798,14 @@ export default function Dashboard() {
                   isMulti
                   options={categories}
                   value={myLessonEdit.tags}
-                  onChange={selected => setMyLessonEdit(prev => ({ ...prev, tags: selected }))}
                   styles={{
+                    menu: (baseStyles, state) => ({
+                      ...baseStyles,
+                      color: "black"
+                    }),
                     container: base => ({ ...base, width: '60%' })
                   }}
+                  onChange={selected => setMyLessonEdit(prev => ({ ...prev, tags: selected }))}
                 />
               </div>
             </div>
@@ -861,6 +891,8 @@ export default function Dashboard() {
               onClick={() => setShowClose(false)}
               style={{
                 marginLeft: '1rem',
+                background: "#f9f9f9",
+                color: 'black',
                 padding: '0.5rem 1rem',
                 fontSize: '1rem',
                 cursor: 'pointer'
@@ -915,11 +947,185 @@ export default function Dashboard() {
               My Course History & Reviews
             </h2>
 
-            {allLessonsHistory.length === 0 ? (
+            {(teachingLessons.length + enrolledLessons.length) === 0 ? (
               <p style={{ color: '#ccc' }}>You have no history yet.</p>
             ) : (
               <ul style={{ listStyle: 'none', padding: 0 }}>
-                {allLessonsHistory.map(entry => (
+                {teachingLessons.map(lesson => {
+                  return <div
+                    key={lesson.id}
+                    style={{
+                      background: '#3a3a3a',
+                      padding: '0.8rem 1rem',
+                      borderRadius: 4,
+                      marginBottom: '0.8rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '1rem', color: '#fff' }}>
+                        {lesson.title}
+                      </strong>
+                      <span style={{
+                        fontSize: '0.85rem',
+                        color: '#00e676'
+                      }}>
+                        Teaching
+                      </span>
+                    </div>
+                    {lesson.closed && (
+                      <div style={{
+                        marginTop: '0.3rem',
+                        background: '#c0392b',
+                        color: '#fff',
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '0.5rem',
+                        display: 'inline-block',
+                        fontSize: '0.75rem',
+                      }}>
+                        Closed
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        marginBottom: "1.5rem"
+                      }}
+                    >
+                      <p style={{ margin: '0.6rem 0', fontSize: '0.9rem', color: '#ddd' }}>
+                        <strong>My Feedback: </strong>
+                        <em>{Math.round((lesson.reviews.length === 0 ? 0 : lesson.reviews.map(r => r.rating).reduce((a, b) => a+b, 0) / lesson.reviews.length) * 10) / 10}</em>
+                      </p>
+                      <div 
+                        style={{
+                          width: "80%",
+                          maxHeight: "100px",
+                          overflow: "auto"
+                        }}
+                      >
+                        {lesson.reviews.map(r => (
+                          <div
+                            key={r.id}
+                            style={{
+                              display: "flex",
+                              width: "100%",
+                              justifyContent: "space-between",
+                              marginBottom: "0.5rem",
+                              gap: "1rem"
+                            }}
+                          >
+                            <div style={{fontWeight: "bold", textAlign: "start"}}>{r.reviewerName}:</div>
+                            <div style={{fontStyle: "italic", maxWidth: "200px",  textAlign: "end", textOverflow: "ellipsis", overflow: "hidden"}}>"{r.description}"</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/lesson/${lesson.lessonId}`)}
+                      style={{
+                        backgroundColor: '#ff5722',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '0.5rem 1rem',
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      View Lesson Details
+                    </button>
+                  </div>
+                })}
+                {enrolledLessons.map(lesson => {
+                  return <div
+                    key={lesson.id}
+                    style={{
+                      background: '#3a3a3a',
+                      padding: '0.8rem 1rem',
+                      borderRadius: 4,
+                      marginBottom: '0.8rem'
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '1rem', color: '#fff' }}>
+                        {lesson.title}
+                      </strong>
+                      <span style={{
+                        fontSize: '0.85rem',
+                        color: '#29b6f6'
+                      }}>
+                        Attending
+                      </span>
+                    </div>
+                    {lesson.closed && (
+                      <div style={{
+                        marginTop: '0.3rem',
+                        background: '#c0392b',
+                        color: '#fff',
+                        padding: '0.2rem 0.5rem',
+                        borderRadius: '0.5rem',
+                        display: 'inline-block',
+                        fontSize: '0.75rem',
+                      }}>
+                        Closed
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        display: "flex",
+                        flexDirection: "column",
+                        justifyContent: "center",
+                        alignItems: "center",
+                        marginBottom: "1.5rem"
+                      }}
+                    >
+                      <p style={{ margin: '0.6rem 0', fontSize: '0.9rem', color: '#ddd' }}>
+                        <strong>My Reviews: </strong>
+                        <em>{Math.round((lesson.reviews.length === 0 ? 0 : lesson.reviews.map(r => r.rating).reduce((a, b) => a+b, 0) / lesson.reviews.length) * 10) / 10}</em>
+                      </p>
+                      <div 
+                        style={{
+                          width: "80%",
+                          maxHeight: "100px",
+                          overflow: "auto"
+                        }}
+                      >
+                        {lesson.reviews.filter(r => r.uid === uid).map(r => (
+                          <div
+                            key={r.id}
+                            style={{
+                              display: "flex",
+                              width: "100%",
+                              justifyContent: "space-between",
+                              marginBottom: "0.5rem",
+                              gap: "1rem"
+                            }}
+                          >
+                            <div style={{fontWeight: "bold", textAlign: "start"}}>{r.reviewerName}:</div>
+                            <div style={{fontStyle: "italic", maxWidth: "200px",  textAlign: "end", textOverflow: "ellipsis", overflow: "hidden"}}>"{r.description}"</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => navigate(`/lesson/${lesson.lessonId}`)}
+                      style={{
+                        backgroundColor: '#ff5722',
+                        color: '#fff',
+                        border: 'none',
+                        padding: '0.5rem 1rem',
+                        borderRadius: 4,
+                        cursor: 'pointer',
+                        fontSize: '0.9rem'
+                      }}
+                    >
+                      View Lesson Details
+                    </button>
+                  </div>
+                })}
+                {/* {allLessonsHistory.map(entry => (
                   <li
                     key={entry.lessonId}
                     style={{
@@ -935,7 +1141,7 @@ export default function Dashboard() {
                       </strong>
                       <span style={{
                         fontSize: '0.85rem',
-                        color: entry.role === 'Taught' ? '#00e676' : '#29b6f6'
+                        color: entry.role === 'Teaching' ? '#00e676' : '#29b6f6'
                       }}>
                         {entry.role}
                       </span>
@@ -954,7 +1160,7 @@ export default function Dashboard() {
                       </div>
                     )}
                     <p style={{ margin: '0.6rem 0', fontSize: '0.9rem', color: '#ddd' }}>
-                      <strong>My Review:</strong> <em>{entry.yourReview}</em>
+                      <strong>{entry.role === "Teaching" ? "My Feedback:" : "My Review:"}</strong> <em>{entry.yourReview}</em>
                     </p>
                     <button
                       onClick={() => navigate(`/lesson/${entry.lessonId}`)}
@@ -971,7 +1177,7 @@ export default function Dashboard() {
                       View Lesson Details
                     </button>
                   </li>
-                ))}
+                ))} */}
               </ul>
             )}
           </div>
