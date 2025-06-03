@@ -1,134 +1,148 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useSearchParams } from 'react-router-dom'
-import { fetchUsers, sendMessage, startChat, viewChats, viewMessages } from '../services/firebase';
-import { useAuth } from '../contexts/AuthContext';
+// src/components/Chats.jsx
 
-const sampleConversations = [
-  {
-    id: 1,
-    name: 'John Faustino',
-    avatar: '/avatars/john.jpg',
-    lastMessage: 'Got the files?',
-    time: '52m',
-    messages: [
-      { author: 'John Faustino', text: 'Hey, did you get the report?', time: '10:12' },
-      { author: 'You', text: 'Almost done, sending in 5.', time: '10:14' },
-      { author: 'John Faustino', text: 'Perfect, thanks!', time: '10:15' },
-    ],
-  },
-  {
-    id: 2,
-    name: 'Cassia Tofano',
-    avatar: '/avatars/cassia.jpg',
-    lastMessage: 'Let’s catch up later.',
-    time: '1h',
-    messages: [
-      { author: 'Cassia Tofano', text: 'Up for coffee this afternoon?', time: '09:05' },
-      { author: 'You', text: 'Sure—2 PM works for me.', time: '09:07' },
-    ],
-  },
-  {
-    id: 3,
-    name: 'Youtong Lee',
-    avatar: '/avatars/youtong.jpg',
-    lastMessage: 'See you then!',
-    time: '28m',
-    messages: [
-      { author: 'You', text: 'Don’t forget our meeting at 3.', time: '11:00' },
-      { author: 'Youtong Lee', text: 'On my way!', time: '11:32' },
-    ],
-  },
-];
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useSearchParams, useNavigate } from 'react-router-dom';
+import {
+  fetchUsers,
+  sendMessage,
+  startChat,
+  viewChats,
+  viewMessages
+} from '../services/firebase';
+import { useAuth } from '../contexts/AuthContext';
+import { getDoc, doc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 
 export default function Chats() {
-  const { user: authUser } = useAuth(); // Firebase Auth user
+  const { user: authUser } = useAuth();
   const uid = authUser?.uid;
-  const [convos, setConvos] = useState([]);
-  const [activeId, setActiveId] = useState("");
-  const [input, setInput] = useState('');
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  const [convos, setConvos] = useState([]);
+  const [activeId, setActiveId] = useState('');
+  const [activeConvo, setActiveConvo] = useState(null);
+  const [courseTitle, setCourseTitle] = useState(''); // <-- new state
+  const [inputText, setInputText] = useState('');
+  const [fileToSend, setFileToSend] = useState(null);
   const bottomRef = useRef();
-  const [activeConvo, setActiveConvo] = useState();
-  // const activeConvo = convos.find(c => c.id === activeId);
 
+  // Load conversations and messages
   const load = useCallback(async () => {
+    if (!uid) return;
+
+    // 1) Get all chat docs where this user is a member
     const result = await viewChats(uid);
+    const memberParam = searchParams.get('member');
+    const needsNewChat = memberParam && result.every(r => !r.members.includes(memberParam));
 
-    const member = searchParams.get("member");
-    const nonexists = result.find(r => r.members.includes(member)) === undefined;
-
-    // set name
+    // 2) Fetch all users once
     const userSnapshots = await fetchUsers();
-    const users = [];
-    userSnapshots.forEach((sn) => {
-      users.push({ id: sn.id, ...sn.data() });
-    });
-    
-    result.forEach((res) => {
-      const members = res.members;
-      const other = members[0] === uid ? members[1] : members[0];
-      const user = users.find(u => u.id === other);
-      res.name = user.displayName;
-      res.avatar = user.photoURL === "" ? '/assets/profile-placeholder.png' : user.photoURL;
-      res.other = other;
-    });
+    const users = userSnapshots.docs.map(s => ({ id: s.id, ...s.data() }));
 
-    for(const idx in result) {
-      const r = result[idx];
-      const messages = await viewMessages(r.id);
-      result.map((res) => {
-        if (res.id === r.id) {
-          res.messages = messages;
+    // 3) Attach name, avatar, other UID, lessonId, messages, lastMessage, time
+    for (let chat of result) {
+      const otherUid = chat.members.find(m => m !== uid);
+      const userInfo = users.find(u => u.id === otherUid) || {};
+      chat.name = userInfo.displayName || 'Unknown';
+      chat.avatar = userInfo.photoURL || '/assets/profile-placeholder.png';
+      chat.other = otherUid;
+
+      // Assume each chat document has a `lessonId` field
+      // (set when calling startChat with a lesson context)
+      // If missing, ignore
+      if (chat.lessonId) {
+        // Fetch the lesson title
+        const lessonSnap = await getDoc(doc(db, 'lessons', chat.lessonId));
+        if (lessonSnap.exists()) {
+          chat.course = lessonSnap.data().title;
+        } else {
+          chat.course = 'Unknown Course';
         }
-      })
+      } else {
+        chat.course = '';
+      }
+
+      // Fetch all messages for this chat
+      chat.messages = await viewMessages(chat.id);
+      // Determine last message and timestamp
+      if (chat.messages.length) {
+        const last = chat.messages[chat.messages.length - 1];
+        chat.lastMessage = last.text.startsWith('📷') ? 'Sent a photo' : last.text;
+        chat.time = last.time;
+      } else {
+        chat.lastMessage = '';
+        chat.time = '';
+      }
     }
 
-    if (!nonexists) {
-      const messages = await viewMessages(result.find(r => r.members.includes(member)).id);
-      result.map((res) => {
-        if (res.members.includes(member)) {
-          res.messages = messages;
-        }
-      })
-      setActiveId(result.find(r => r.members.includes(member)).id)
+    // 4) If directed to a specific member, start new chat if needed
+    if (needsNewChat) {
+      // If creating a new chat from a lesson page, pass that lessonId as second argument
+      const lessonParam = searchParams.get('lessonId') || '';
+      const newChatId = await startChat(uid, memberParam, lessonParam); // modified helper signature
+      setActiveId(newChatId);
+    } else if (memberParam) {
+      const existing = result.find(r => r.members.includes(memberParam));
+      setActiveId(existing.id);
     }
 
     setConvos(result);
-    if (nonexists && member) {
-      await startChat(uid, member).then((res) => {
-        setActiveId(res);
-      });
-    }
-  }, [searchParams, uid, setConvos, setActiveId]);
+  }, [searchParams, uid]);
 
   useEffect(() => {
     load();
   }, [load]);
 
   useEffect(() => {
-    setActiveConvo(convos.find(c => c.id === activeId));
-  }, [convos, activeId])
+    const convo = convos.find(c => c.id === activeId) || null;
+    setActiveConvo(convo);
+
+    // When active chat changes, update the displayed course title
+    if (convo && convo.course) {
+      setCourseTitle(convo.course);
+    } else {
+      setCourseTitle('');
+    }
+  }, [convos, activeId]);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activeConvo?.messages]);
 
-  const handleSend = useCallback(async e => {
+  const handleSend = async e => {
     e.preventDefault();
-    if (!input.trim()) return;
-    // activeConvo.messages.push({ author: uid, text: input.trim(), time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) });
-    setInput('');
-    // force update
-    setInput(prev => prev);
-    await sendMessage(activeConvo.id, uid, input.trim());
+    if (!activeConvo) return;
+
+    let content = inputText.trim();
+    if (fileToSend) {
+      content = '📷 ' + fileToSend.name;
+      // In a real app, upload to Firebase Storage, then send the URL
+      setFileToSend(null);
+    }
+    if (!content) return;
+
+    setInputText('');
+    await sendMessage(activeConvo.id, uid, content);
     await load();
-  }, [activeConvo, input, uid]);
+  };
 
   return (
     <div style={{ display: 'flex', height: '100vh', fontFamily: 'Arial, sans-serif' }}>
       {/* Sidebar */}
-      <div style={{ width: 300, background: '#3C2C6C', color: '#fff', overflowY: 'auto' }}>
-        <div style={{ padding: '1rem', fontSize: '1.2rem', fontWeight: 'bold', textAlign: 'center' }}>
+      <div style={{
+        width: 280,
+        background: '#1e1e1e',
+        color: '#fff',
+        overflowY: 'auto'
+      }}>
+        <div style={{
+          padding: '1rem',
+          fontSize: '1.25rem',
+          fontWeight: 'bold',
+          textAlign: 'center',
+          borderBottom: '1px solid #333'
+        }}>
           SkillSwap Chats
         </div>
         {convos.map(c => (
@@ -139,43 +153,116 @@ export default function Chats() {
               display: 'flex',
               alignItems: 'center',
               padding: '0.75rem 1rem',
-              background: c.id === activeId ? '#6930C3' : 'transparent',
-              cursor: 'pointer'
+              background: c.id === activeId ? '#333' : 'transparent',
+              cursor: 'pointer',
+              borderBottom: '1px solid #2a2a2a'
             }}
           >
             <img
               src={c.avatar}
               alt={c.name}
-              style={{ width: 40, height: 40, borderRadius: '50%', marginRight: '0.75rem' }}
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: '50%',
+                marginRight: '0.75rem',
+                objectFit: 'cover',
+                border: '2px solid #555'
+              }}
             />
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 14, fontWeight: 500 }}>{c.name}</div>
-              <div style={{ fontSize: 12, color: '#ddd', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            <div style={{ flex: 1, overflow: 'hidden' }}>
+              <div style={{
+                fontSize: 14,
+                fontWeight: 500,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}>
+                {c.name}
+              </div>
+              <div style={{
+                fontSize: 12,
+                color: '#aaa',
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis'
+              }}>
                 {c.lastMessage}
               </div>
             </div>
-            <div style={{ fontSize: 12, marginLeft: '0.5rem', color: '#ccc' }}>{c.time}</div>
+            <div style={{ fontSize: 11, color: '#777', marginLeft: '0.5rem' }}>
+              {c.time}
+            </div>
           </div>
         ))}
       </div>
 
       {/* Chat Panel */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', background: '#F2F2F2' }}>
+      <div style={{
+        flex: 1,
+        display: 'flex',
+        flexDirection: 'column',
+        background: '#f9f9f9'
+      }}>
         {/* Header */}
-        <div style={{ padding: '1rem', background: '#fff', borderBottom: '1px solid #ddd', display: 'flex', alignItems: 'center' }}>
-          {activeId && <><img
-            src={activeConvo?.avatar || '/assets/profile-placeholder.png'}
-            alt={activeConvo?.name}
-            style={{ width: 48, height: 48, borderRadius: '50%', marginRight: '1rem' }}
-          />
-          <div>
-            <div style={{ fontSize: 16, fontWeight: 'bold' }}>{activeConvo?.name}</div>
-            <div style={{ fontSize: 12, color: '#666' }}>Online</div>
-          </div></>}
+        <div style={{
+          padding: '0.75rem 1rem',
+          background: '#fff',
+          borderBottom: '1px solid #ddd',
+          display: 'flex',
+          alignItems: 'center'
+        }}>
+          <button
+            onClick={() => navigate('/dashboard')}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: '1.5rem',
+              cursor: 'pointer',
+              marginRight: '0.75rem',
+              color: '#333'
+            }}
+          >
+            ←
+          </button>
+          {activeConvo ? (
+            <div style={{ display: 'flex', alignItems: 'center' }}>
+              <img
+                src={activeConvo.avatar}
+                alt={activeConvo.name}
+                style={{
+                  width: 44,
+                  height: 44,
+                  borderRadius: '50%',
+                  marginRight: '0.75rem',
+                  objectFit: 'cover',
+                  border: '2px solid #ccc'
+                }}
+              />
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 'bold', color: '#222' }}>
+                  {activeConvo.name}
+                  {courseTitle && (
+                    <span style={{ fontSize: 12, color: '#555', marginLeft: '0.5rem' }}>
+                      ({courseTitle})
+                    </span>
+                  )}
+                </div>
+                <div style={{ fontSize: 12, color: '#888' }}>Online</div>
+              </div>
+            </div>
+          ) : (
+            <div style={{ fontSize: 16, color: '#555' }}>Select a chat</div>
+          )}
         </div>
 
         {/* Messages */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '1rem' }}>
+        <div style={{
+          flex: 1,
+          overflowY: 'auto',
+          padding: '1rem',
+          background: '#eaeaea'
+        }}>
           {activeConvo && activeConvo.messages.map((m, idx) => {
             const isMe = m.authorUid === uid;
             return (
@@ -191,25 +278,43 @@ export default function Chats() {
                   <img
                     src={activeConvo.avatar}
                     alt={m.author}
-                    style={{ width: 32, height: 32, borderRadius: '50%', marginRight: '0.5rem' }}
+                    style={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      marginRight: '0.5rem',
+                      objectFit: 'cover',
+                      border: '1px solid #ccc'
+                    }}
                   />
                 )}
                 <div style={{
-                  maxWidth: '60%',
-                  background: isMe ? '#0063dc' : '#fff',
-                  color: isMe ? '#fff' : '#333',
+                  maxWidth: '65%',
+                  background: isMe ? '#333' : '#fff',
+                  color: isMe ? '#fff' : '#222',
                   padding: '0.75rem',
-                  borderRadius: 8,
-                  boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                  borderRadius: 12,
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.1)',
+                  wordWrap: 'break-word',
+                  position: 'relative'
                 }}>
-                  {m.text}
-                  <div style={{ fontSize: 10, color: isMe ? '#eee' : '#999', marginTop: 4, textAlign: 'right' }}>
+                  {m.text.startsWith('📷') ? (
+                    <em style={{ color: isMe ? '#ddd' : '#555' }}>
+                      Sent a photo: {m.text.slice(2)}
+                    </em>
+                  ) : (
+                    m.text
+                  )}
+                  <div style={{
+                    fontSize: 10,
+                    color: isMe ? '#aaa' : '#888',
+                    marginTop: 4,
+                    textAlign: 'right'
+                  }}>
                     {m.time}
                   </div>
                 </div>
-                {isMe && (
-                  <div style={{ width: 32, height: 32, marginLeft: '0.5rem' }} />
-                )}
+                {isMe && <div style={{ width: 32, height: 32, marginLeft: '0.5rem' }} />}
               </div>
             );
           })}
@@ -217,21 +322,67 @@ export default function Chats() {
         </div>
 
         {/* Input */}
-        <form onSubmit={handleSend} style={{ display: 'flex', padding: '0.5rem 1rem', background: '#fff', borderTop: '1px solid #ddd' }}>
+        <form
+          onSubmit={handleSend}
+          style={{
+            display: 'flex',
+            padding: '0.5rem 1rem',
+            background: '#fff',
+            borderTop: '1px solid #ddd',
+            alignItems: 'center'
+          }}
+        >
+          <button
+            type="button"
+            onClick={() => document.getElementById('fileInput').click()}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              fontSize: '1.2rem',
+              cursor: 'pointer',
+              marginRight: '0.5rem',
+              color: '#555'
+            }}
+          >
+            📷
+          </button>
+          <input
+            id="fileInput"
+            type="file"
+            style={{ display: 'none' }}
+            onChange={e => setFileToSend(e.target.files[0])}
+          />
+          {fileToSend && (
+            <span style={{ marginRight: '0.75rem', fontSize: 12, color: '#555' }}>
+              {fileToSend.name}
+            </span>
+          )}
           <input
             type="text"
             placeholder="Type a message"
-            value={input}
-            onChange={e => setInput(e.target.value)}
+            value={inputText}
+            onChange={e => setInputText(e.target.value)}
             style={{
               flex: 1,
               padding: '0.75rem',
-              borderRadius: 4,
+              borderRadius: 20,
               border: '1px solid #ccc',
-              marginRight: '0.5rem'
+              marginRight: '0.5rem',
+              fontSize: '1rem'
             }}
           />
-          <button type="submit" style={{ padding: '0 1rem', background: '#0063dc', border: 'none', borderRadius: 4, color: '#fff' }}>
+          <button
+            type="submit"
+            style={{
+              padding: '0 1rem',
+              background: '#333',
+              border: 'none',
+              borderRadius: 20,
+              color: '#fff',
+              fontSize: '1rem',
+              cursor: 'pointer'
+            }}
+          >
             Send
           </button>
         </form>
