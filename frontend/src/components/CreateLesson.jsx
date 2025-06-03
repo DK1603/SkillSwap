@@ -10,14 +10,14 @@ import {
 } from '../services/firebase';
 
 const categories = [
-  { key: 'all', icon: '🗂️', label: 'All' },
-  { key: 'programming', icon: '💻', label: 'Programming' },
-  { key: 'economics', icon: '💰', label: 'Economics' },
-  { key: 'math', icon: '➗', label: 'Math' },
-  { key: 'science', icon: '🔬', label: 'Science'},
-  { key: 'cooking', icon: '🍳', label: 'Cooking' },
-  { key: 'design', icon: '🎨', label: 'Design' },
-  { key: 'self-development', icon: '🧭', label: 'Extra-skills' },
+  { value: 'all',           icon: '🗂️', label: 'All' },
+  { value: 'programming',   icon: '💻', label: 'Programming' },
+  { value: 'economics',     icon: '💰', label: 'Economics' },
+  { value: 'math',          icon: '➗', label: 'Math' },
+  { value: 'science',       icon: '🔬', label: 'Science' },
+  { value: 'cooking',       icon: '🍳', label: 'Cooking' },
+  { value: 'design',        icon: '🎨', label: 'Design' },
+  { value: 'self-development', icon: '🧭', label: 'Extra-skills' },
 ];
 
 export default function CreateLesson() {
@@ -82,7 +82,7 @@ export default function CreateLesson() {
         open: true,
         thumbnailURL: thumbnail,
         startTime: new Date(startTime), // Firestore will store as timestamp
-        createdAt: null // we'll rely on serverTimestamp() in the helper
+        
       };
 
       // createLesson returns a DocumentReference
@@ -501,7 +501,7 @@ export default function CreateLesson() {
               }}
             />
             <small style={{ color: '#777' }}>
-              Must be at least 24 hours from now (enforced by your Firestore rules).
+              Must be at least 24 hours from now (enforced by database rules).
             </small>
           </div>
         </div>
