@@ -411,7 +411,7 @@ export default function LessonDetails() {
         {/**
          * ─── Right Reviews / Comments (placeholder) ─────────────────────────────────
          */}
-        <div style={{ flex: 1, borderRadius: 8, background: '#ffffff', border: '1px solid #dddddd', padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", overflow: "auto", maxHeight: "350px", }}>
+        <div style={{ flex: 1, borderRadius: 8, background: '#ffffff', border: '1px solid #dddddd', padding: "1rem", display: "flex", flexDirection: "column", gap: "0.5rem", overflow: "auto", maxHeight: "300px", }}>
           <div style={{display: "flex", alignItems: "center", justifyContent: "space-between"}}>
             <h3 style={{ marginTop: '0.25rem', marginBottom: '0.5rem' }}>📝 Reviews</h3>
             {enrolled && 
