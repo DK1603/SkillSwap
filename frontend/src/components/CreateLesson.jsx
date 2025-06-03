@@ -77,6 +77,7 @@ export default function CreateLesson() {
         difficulty,
         tags: tags.map((t) => t.value),
         category: category,
+        open: true,
         startTime: new Date(startTime), // Firestore will store as timestamp
         createdAt: null // we'll rely on serverTimestamp() in the helper
       };
