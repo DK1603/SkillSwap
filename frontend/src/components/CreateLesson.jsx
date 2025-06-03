@@ -10,13 +10,14 @@ import {
 } from '../services/firebase';
 
 const categories = [
-  { value: 'programming', icon: '💻', label: '프로그래밍' },
-  { value: 'economics', icon: '💰', label: '경제' },
-  { value: 'math', icon: '➗', label: '수학' },
-  { value: 'science', icon: '🔬', label: '과학'},
-  { value: 'cooking', icon: '🍳', label: '요리' },
-  { value: 'design', icon: '🎨', label: '디자인' },
-  { value: 'self-development', icon: '🧭', label: '자기계발' },
+  { key: 'all', icon: '🗂️', label: 'All' },
+  { key: 'programming', icon: '💻', label: 'Programming' },
+  { key: 'economics', icon: '💰', label: 'Economics' },
+  { key: 'math', icon: '➗', label: 'Math' },
+  { key: 'science', icon: '🔬', label: 'Science'},
+  { key: 'cooking', icon: '🍳', label: 'Cooking' },
+  { key: 'design', icon: '🎨', label: 'Design' },
+  { key: 'self-development', icon: '🧭', label: 'Extra-skills' },
 ];
 
 export default function CreateLesson() {
