@@ -28,13 +28,13 @@ import {
 
 // ─── 1. Your Firebase config ─────────────────────────────────────────────────
 const firebaseConfig = {
-  apiKey: "[REDACTED_API_KEY]",
-  authDomain: "[REDACTED_DOMAIN]",
-  projectId: "[REDACTED_PROJECT_ID]",
-  storageBucket: "[REDACTED_PROJECT_ID].firebasestorage.app",
-  messagingSenderId: "[REDACTED_SENDER_ID]",
-  appId: "1:[REDACTED_SENDER_ID]:web:c5939bcbb0055a2b402e61",
-  measurementId: "[REDACTED_MEASUREMENT_ID]"
+  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId: import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
 };
 
 // ─── 2. Initialize Firebase App, Auth, and Firestore ───────────────────────────
